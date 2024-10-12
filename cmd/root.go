@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 
@@ -16,6 +17,12 @@ const (
 `
 )
 
+func mustWrite(w io.Writer, msg string) {
+	if _, err := w.Write([]byte(msg)); err != nil {
+		panic(err)
+	}
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "healthchecksio-cli <check_id> [<signal>]",
 	Short: "Call healthchecks.io checks from the command line",
@@ -26,11 +33,11 @@ var rootCmd = &cobra.Command{
 		)
 
 		if len(args) == 0 {
-			cmd.ErrOrStderr().Write([]byte(rootCmdUsage))
+			mustWrite(cmd.ErrOrStderr(), rootCmdUsage)
 			return errors.New("Please provide a check id")
 		}
 		if len(args) > 2 {
-			cmd.ErrOrStderr().Write([]byte(rootCmdUsage))
+			mustWrite(cmd.ErrOrStderr(), rootCmdUsage)
 			return fmt.Errorf("extraneous arguments found: %v", args[2:])
 		}
 		checkId = args[0]
@@ -38,11 +45,11 @@ var rootCmd = &cobra.Command{
 			signal = args[1]
 		}
 
-		cmd.ErrOrStderr().Write([]byte("calling check " + checkId))
+		mustWrite(cmd.ErrOrStderr(), "calling check "+checkId)
 		if signal != "" {
-			cmd.ErrOrStderr().Write([]byte(" with signal " + signal))
+			mustWrite(cmd.ErrOrStderr(), " with signal "+signal)
 		}
-		cmd.ErrOrStderr().Write([]byte("\n"))
+		mustWrite(cmd.ErrOrStderr(), "\n")
 
 		url := "https://hc-ping.com/" + checkId
 		if signal != "" {
@@ -54,7 +61,6 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		defer resp.Body.Close()
-
 		if resp.StatusCode != 200 {
 			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		}

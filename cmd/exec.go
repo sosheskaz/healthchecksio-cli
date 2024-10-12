@@ -2,22 +2,16 @@ package cmd
 
 import (
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 
 	"github.com/spf13/cobra"
 )
 
-// execCmd represents the exec command
 var execCmd = &cobra.Command{
 	Use:   "exec [flags] [command...]",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Execute a command and report its status to healthchecks.io",
 	Run: func(cmd *cobra.Command, args []string) {
 		checkId := cmd.Flag("check").Value.String()
 		if checkId == "" {
@@ -27,46 +21,61 @@ to quickly create a Cobra application.`,
 
 		subcommand := exec.Command(args[0], args[1:]...)
 		subcommand.Stdout = cmd.OutOrStdout()
-		subcommand.Stderr = cmd.OutOrStderr()
+		subcommand.Stderr = cmd.ErrOrStderr()
 
-		cmd.OutOrStderr().Write([]byte("starting check " + checkId + "\n"))
+		mustWrite(cmd.ErrOrStderr(), "starting check "+checkId+"\n")
 		if resp, err := http.Get("https://hc-ping.com/" + checkId + "/start"); err != nil {
-			cmd.OutOrStderr().Write([]byte(err.Error()))
-			return
-		} else if resp.StatusCode != 200 {
-			cmd.OutOrStderr().Write([]byte("unexpected status code: " + strconv.Itoa(resp.StatusCode)))
-			return
+			panic(err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				panic(err)
+			}
 		}
 
-		err := subcommand.Start()
-		if err != nil {
-			cmd.OutOrStderr().Write([]byte(err.Error()))
-			return
+		if err := subcommand.Start(); err != nil {
+			panic(err)
 		}
 
 		if err := subcommand.Wait(); err != nil {
-			_, ok := err.(*exec.ExitError)
-			if !ok {
-				cmd.OutOrStderr().Write([]byte(err.Error()))
-				return
+			if _, ok := err.(*exec.ExitError); !ok {
+				panic(err)
 			}
 		}
 
 		succeeded := subcommand.ProcessState.Success()
 
+		var (
+			resp  *http.Response
+			hcErr error
+		)
+
 		if succeeded {
-			cmd.ErrOrStderr().Write([]byte("check succeeded\n"))
-			http.Get("https://hc-ping.com/" + checkId)
+			//nolint:errcheck
+			mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
+			resp, hcErr = http.Get("https://hc-ping.com/" + checkId)
 		} else {
-			cmd.ErrOrStderr().Write([]byte("check failed\n"))
-			http.Get("https://hc-ping.com/" + checkId + "/" + strconv.Itoa(subcommand.ProcessState.ExitCode()))
+			//nolint:errcheck
+			mustWrite(cmd.ErrOrStderr(), "check failed\n")
+			resp, hcErr = http.Get("https://hc-ping.com/" + checkId + "/" + strconv.Itoa(subcommand.ProcessState.ExitCode()))
 		}
+
+		if hcErr != nil {
+			panic(hcErr)
+		} else if resp.StatusCode != 200 {
+			panic(hcErr)
+		}
+		defer resp.Body.Close()
+
+		os.Exit(subcommand.ProcessState.ExitCode())
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(execCmd)
 	execCmd.Flags().StringP("check", "c", "", "The check id to be used")
-	execCmd.MarkFlagRequired("check")
+	if err := execCmd.MarkFlagRequired("check"); err != nil {
+		panic(err)
+	}
 	execCmd.Args = cobra.MinimumNArgs(1)
 }
