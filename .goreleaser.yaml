@@ -55,6 +55,8 @@ kos:
     base_image: gcr.io/distroless/static:nonroot
     tags:
       - "{{.Version}}"
+      - "{{.Major}}"
+      - "{{.Major}}.{{.Minor}}"
       - latest
     sbom: none
     bare: true
