@@ -26,9 +26,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          depth: 100
-
       - uses: actions/setup-go@v5
 
       - name: Login to GHCR
