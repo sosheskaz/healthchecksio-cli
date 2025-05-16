@@ -27,7 +27,7 @@ var execCmd = &cobra.Command{
 		if resp, err := http.Get("https://hc-ping.com/" + checkId + "/start"); err != nil {
 			panic(err)
 		} else {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != 200 {
 				panic(err)
 			}
@@ -65,7 +65,7 @@ var execCmd = &cobra.Command{
 		} else if resp.StatusCode != 200 {
 			panic(hcErr)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		os.Exit(subcommand.ProcessState.ExitCode())
 	},

@@ -34,7 +34,7 @@ var rootCmd = &cobra.Command{
 
 		if len(args) == 0 {
 			mustWrite(cmd.ErrOrStderr(), rootCmdUsage)
-			return errors.New("Please provide a check id")
+			return errors.New("please provide a check id")
 		}
 		if len(args) > 2 {
 			mustWrite(cmd.ErrOrStderr(), rootCmdUsage)
@@ -60,7 +60,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != 200 {
 			return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		}
