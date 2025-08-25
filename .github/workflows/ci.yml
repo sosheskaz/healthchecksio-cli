@@ -8,13 +8,13 @@ jobs:
   golangci-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
       - uses: golangci/golangci-lint-action@v8
   go-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
       - run: go mod tidy -diff -v
       - run: go vet ./...
@@ -23,7 +23,7 @@ jobs:
   go-releaser-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
       - uses: goreleaser/goreleaser-action@v6
         with:
