@@ -4,7 +4,6 @@ A simple CLI for healthchecks.io
 
 Usage:
 
-
 ```bash
 healthchecksio-cli <check_id> [<signal>]
 ```

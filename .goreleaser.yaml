@@ -16,10 +16,8 @@ builds:
       - freebsd
       - windows
       - darwin
-    goarch:
-      - amd64
-      - arm64
-      - riscv64
+    flags:
+      - -trimpath
 
 archives:
   - formats: [tar.gz]
@@ -36,6 +34,18 @@ archives:
       - goos: windows
         formats: [zip]
 
+homebrew_casks:
+  - name: "{{ .ProjectName }}"
+    homepage: https://github.com/sosheskaz/healthchecksio-cli
+    description: "A simple CLI for healthchecks.io."
+    repository:
+      owner: sosheskaz
+      name: homebrew-tap
+    completions:
+      bash: completions/bash_completion.bash
+      zsh: completions/zsh_completion.zsh
+      fish: completions/fish_completion.fish
+
 changelog:
   sort: asc
   filters:
@@ -45,7 +55,6 @@ changelog:
 
 kos:
   - repositories: [ghcr.io/sosheskaz/healthchecksio-cli]
-    base_image: gcr.io/distroless/static:nonroot
     tags:
       - "{{.Version}}"
       - "{{.Major}}"
