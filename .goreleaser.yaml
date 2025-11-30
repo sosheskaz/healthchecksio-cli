@@ -33,6 +33,8 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - completions/*
 
 homebrew_casks:
   - name: "{{ .ProjectName }}"
@@ -46,6 +48,12 @@ homebrew_casks:
       bash: completions/bash_completion.sh
       zsh: completions/zsh_completion.sh
       fish: completions/fish_completion.fish
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/foo"]
+          end
 
 changelog:
   sort: asc

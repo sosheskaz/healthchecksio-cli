@@ -9,6 +9,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
+  packages: write
 
 name: release-please
 
@@ -16,7 +17,18 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - id: release-please
+        uses: googleapis/release-please-action@v4
         with:
           release-type: go
           token: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      releases_created: ${{ steps.release-please.outputs.releases_created }}
+      tag_name: ${{ steps.release-please.outputs.tag_name }}
+  goreleaser:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.release-please.outputs.tag_name }}
