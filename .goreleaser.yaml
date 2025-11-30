@@ -41,9 +41,10 @@ homebrew_casks:
     repository:
       owner: sosheskaz
       name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     completions:
-      bash: completions/bash_completion.bash
-      zsh: completions/zsh_completion.zsh
+      bash: completions/bash_completion.sh
+      zsh: completions/zsh_completion.sh
       fish: completions/fish_completion.fish
 
 changelog:
