@@ -10,12 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	rootCmdUsage = `Usage: %s <check_id> [<signal>]
+func rootCmdUsage() string {
+	return fmt.Sprintf(`Usage: %s <check_id> [<signal>]
   <check_id> - The check id to be used
   <signal> - The signal to be sent, if any. Example: start, success, <return-code>, etc. See the docs for more details.
-`
-)
+`, os.Args[0])
+}
 
 var (
 	topCommands = make([]func() *cobra.Command, 0)
@@ -38,11 +38,11 @@ func rootCommand() *cobra.Command {
 			)
 
 			if len(args) == 0 {
-				mustWrite(cmd.ErrOrStderr(), rootCmdUsage)
+				mustWrite(cmd.ErrOrStderr(), rootCmdUsage())
 				return errors.New("please provide a check id")
 			}
 			if len(args) > 2 {
-				mustWrite(cmd.ErrOrStderr(), rootCmdUsage)
+				mustWrite(cmd.ErrOrStderr(), rootCmdUsage())
 				return fmt.Errorf("extraneous arguments found: %v", args[2:])
 			}
 			checkId = args[0]
@@ -77,6 +77,9 @@ func rootCommand() *cobra.Command {
 	for _, topCmd := range topCommands {
 		c.AddCommand(topCmd())
 	}
+
+	c.InitDefaultCompletionCmd()
+	c.Args = cobra.RangeArgs(1, 2)
 
 	return c
 }
