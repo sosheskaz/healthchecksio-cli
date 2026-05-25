@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "deps",
+  "gitAuthor": "sosheskaz-renovate[bot] <268189871+sosheskaz-renovate[bot]@users.noreply.github.com>",
+  "schedule": [
+    "at any time"
+  ],
+  "postUpdateOptions": ["gomodTidy"],
+  "prHourlyLimit": 0,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch", "minor"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "semanticCommitScope": "actions",
+      "pinDigests": true
+    },
+    {
+      "matchManagers": ["mise"],
+      "semanticCommitScope": "mise"
+    },
+    {
+      "matchManagers": ["gomod"],
+      "semanticCommitScope": "go"
+    },
+    {
+      "matchManagers": ["mise", "gomod"],
+      "matchDepNames": ["go"],
+      "groupName": "go",
+      "semanticCommitScope": "go"
+    }
+  ]
+}
