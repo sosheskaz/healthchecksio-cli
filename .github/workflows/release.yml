@@ -26,8 +26,8 @@ permissions:
   packages: write
 
 env:
-  REF: ${{ github.event.inputs.release_tag || github.ref }}
-  TAP_GITHUB_TOKEN: ${{ github.event.inputs.tap_github_token || secrets.BREW_PAT || github.token }}
+  REF: ${{ inputs.release_tag || github.ref }}
+  TAP_GITHUB_TOKEN: ${{ inputs.tap_github_token || secrets.BREW_PAT || github.token }}
 
 jobs:
   goreleaser:

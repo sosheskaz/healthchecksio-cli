@@ -129,9 +129,10 @@ func (c *Check) Log(ctx context.Context, message string, opts ...RequestOption) 
 
 // CompleteStatus sends a status ping to the healthchecks.io API with the given exit code.
 func (c *Check) CompleteStatus(ctx context.Context, status int, opts ...RequestOption) error {
-	completeURL, err := url.JoinPath(c.checkURL, strconv.Itoa(status))
+	statusPath := strconv.Itoa(status)
+	completeURL, err := url.JoinPath(c.checkURL, statusPath)
 	if err != nil {
-		return BadConfigError{Message: fmt.Sprintf("failed to construct URL from %q and %q: %+v", c.checkURL, "complete", err)}
+		return BadConfigError{Message: fmt.Sprintf("failed to construct URL from %q and %q: %+v", c.checkURL, statusPath, err)}
 	}
 
 	return simpleHandleURL(ctx, completeURL, opts...)

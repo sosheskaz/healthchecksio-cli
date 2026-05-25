@@ -9,8 +9,9 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
-	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 	"github.com/spf13/cobra"
+
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
 
 type invalidCLIArgsError struct {
@@ -34,6 +35,43 @@ func rootCmdUsage() string {
 func mustWrite(w io.Writer, msg string) {
 	if _, err := w.Write([]byte(msg)); err != nil {
 		panic(err)
+	}
+}
+
+func callbackForSignal(cmd *cobra.Command, check *hc.Check, signal string) (func(context.Context) error, error) {
+	switch signal {
+	case "":
+		return func(ctx context.Context) error {
+			return check.Success(ctx)
+		}, nil
+	case "failure", "fail", "false":
+		return func(ctx context.Context) error {
+			return check.Failure(ctx)
+		}, nil
+	case "success", "true":
+		return func(ctx context.Context) error {
+			return check.Success(ctx)
+		}, nil
+	case "log":
+		return func(ctx context.Context) error {
+			message, err := io.ReadAll(cmd.InOrStdin())
+			if err != nil {
+				return fmt.Errorf("failed to read log message: %w", err)
+			}
+			return check.Log(ctx, string(message))
+		}, nil
+	case "start":
+		return func(ctx context.Context) error {
+			return check.Start(ctx)
+		}, nil
+	default:
+		statusCode, err := strconv.Atoi(signal)
+		if err != nil {
+			return nil, &invalidCLIArgsError{Arg: "signal", Problem: fmt.Sprintf("illegal value %q", signal)}
+		}
+		return func(ctx context.Context) error {
+			return check.CompleteStatus(ctx, statusCode)
+		}, nil
 	}
 }
 
@@ -69,36 +107,9 @@ func rootCommand() *cobra.Command {
 				return fmt.Errorf("failed to create check: %w", err)
 			}
 
-			var callback func(context.Context) error
-			switch signal {
-			case "":
-				callback = func(ctx context.Context) error {
-					return check.Success(ctx)
-				}
-			case "failure", "fail", "false":
-				callback = func(ctx context.Context) error {
-					return check.Failure(ctx)
-				}
-			case "success", "true":
-				callback = func(ctx context.Context) error {
-					return check.Success(ctx)
-				}
-			case "log":
-				callback = func(ctx context.Context) error {
-					message, err := io.ReadAll(cmd.InOrStdin())
-					if err != nil {
-						return fmt.Errorf("failed to read log message: %w", err)
-					}
-					return check.Log(ctx, string(message))
-				}
-			default:
-				statusCode, err := strconv.Atoi(signal)
-				if err != nil {
-					return &invalidCLIArgsError{Arg: "signal", Problem: fmt.Sprintf("illegal value %q", signal)}
-				}
-				callback = func(ctx context.Context) error {
-					return check.CompleteStatus(ctx, statusCode)
-				}
+			callback, err := callbackForSignal(cmd, check, signal)
+			if err != nil {
+				return err
 			}
 
 			if err := callback(cmd.Context()); err != nil {

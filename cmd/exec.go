@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 	"github.com/spf13/cobra"
+
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
 
 func execCommand() *cobra.Command {
@@ -29,6 +29,7 @@ func execCommand() *cobra.Command {
 			}
 
 			subcommand := exec.CommandContext(cmd.Context(), args[0], args[1:]...) //nolint:gosec // user-provided command
+			subcommand.Stdin = cmd.InOrStdin()
 			subcommand.Stdout = cmd.OutOrStdout()
 			subcommand.Stderr = cmd.ErrOrStderr()
 
@@ -43,27 +44,28 @@ func execCommand() *cobra.Command {
 			}
 
 			if err := subcommand.Start(); err != nil {
-				panic(fmt.Sprintf("failed to start subcommand %q: %+v", strings.Join(slices.Concat([]string{subcommand.Path}, subcommand.Args), " "), err))
+				panic(fmt.Sprintf("failed to start subcommand %q: %+v", strings.Join(subcommand.Args, " "), err))
 			}
 
 			if err := subcommand.Wait(); err != nil {
 				exitError := &exec.ExitError{}
-				if errors.As(err, &exitError) {
+				if !errors.As(err, &exitError) {
 					panic(err)
 				}
 			}
 
 			exitCode := subcommand.ProcessState.ExitCode()
-			mustWrite(cmd.ErrOrStderr(), fmt.Sprintf("completed with exit code %d", err))
+			mustWrite(cmd.ErrOrStderr(), fmt.Sprintf("completed with exit code %d\n", exitCode))
 
 			if err := check.CompleteStatus(cmd.Context(), exitCode); err != nil {
 				panic(fmt.Sprintf("failed to complete check: %+v", err))
 			}
-			mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
 
 			if exitCode != 0 {
+				mustWrite(cmd.ErrOrStderr(), "check failed\n")
 				os.Exit(exitCode)
 			}
+			mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
 		},
 	}
 

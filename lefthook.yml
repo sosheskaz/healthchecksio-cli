@@ -1,9 +1,8 @@
-
 pre-commit:
   parallel: true
   jobs:
     - name: go mod tidy
-      run: mist exec -- go mod tidy
+      run: mise exec -- go mod tidy
       glob: "{go.mod,go.sum,**/*.go}"
       stage_fixed: true
 

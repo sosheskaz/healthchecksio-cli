@@ -1,4 +1,4 @@
-# golangci-lint configuration for {{PROJECT_NAME}}
+# golangci-lint configuration for healthchecksio-cli
 # golangci-lint v2 configuration format
 version: "2"
 
@@ -212,7 +212,7 @@ linters:
         - .WithMessagef(
         - .WithStack(
       ignore-package-globs:
-        - github.com/{{GITHUB_USERNAME}}/{{PROJECT_NAME}}/*
+        - github.com/sosheskaz/healthchecksio-cli/*
 
     forbidigo:
       forbid:
@@ -297,16 +297,16 @@ formatters:
     - goimports
   settings:
     gofumpt:
-      module-path: github.com/{{GITHUB_USERNAME}}/{{PROJECT_NAME}}
+      module-path: github.com/sosheskaz/healthchecksio-cli
       extra-rules: true
     goimports:
       local-prefixes:
-        - github.com/{{GITHUB_USERNAME}}/{{PROJECT_NAME}}
+        - github.com/sosheskaz/healthchecksio-cli
     gci:
       sections:
         - standard
         - default
-        - prefix(github.com/{{GITHUB_USERNAME}}/{{PROJECT_NAME}})
+        - prefix(github.com/sosheskaz/healthchecksio-cli)
       custom-order: true
 
 issues:
