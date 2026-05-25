@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.1.3...v1.1.4) (2026-05-25)
+
+
+### Bug Fixes
+
+* centralize healthcheck pings and preserve exec status ([#24](https://github.com/sosheskaz/healthchecksio-cli/issues/24)) ([0635fa1](https://github.com/sosheskaz/healthchecksio-cli/commit/0635fa1f5cdf14f4483cb535e808cbd9220e2256))
+
 ## [1.1.3](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.1.2...v1.1.3) (2025-12-09)
 
 
