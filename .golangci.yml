@@ -50,6 +50,7 @@ linters:
     - sqlclosecheck   # Check that sql.Rows and sql.Stmt are closed
     - testifylint     # Check usage of github.com/stretchr/testify
     - tparallel       # Detects inappropriate usage of t.Parallel() method in Go tests
+    - usetesting      # Reports uses of functions with replacement inside the testing package
     - unconvert       # Remove unnecessary type conversions
     - unparam         # Report unused function parameters
     - usestdlibvars   # Detect the possibility to use variables/constants from the Go standard library
@@ -223,6 +224,10 @@ linters:
           pkg: fmt
           msg: use log/slog or logr instead of fmt.Print*
       analyze-types: true
+
+    usetesting:
+      context-background: true
+      context-todo: true
 
     whitespace:
       multi-if: true

@@ -1,7 +1,6 @@
 package hc
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -27,7 +26,7 @@ func TestCheckReportsBadHTTPStatus(t *testing.T) {
 		t.Fatalf("NewUUIDCheck() error = %v", err)
 	}
 
-	err = check.Success(context.Background())
+	err = check.Success(t.Context())
 	var statusErr BadStatusError
 	if !errors.As(err, &statusErr) {
 		t.Fatalf("Success() error = %T %[1]v, want BadStatusError", err)
@@ -53,7 +52,7 @@ func TestCheckReportsRequestFailureCause(t *testing.T) {
 		t.Fatalf("NewUUIDCheck() error = %v", err)
 	}
 
-	err = check.Success(context.Background())
+	err = check.Success(t.Context())
 	var requestErr RequestFailedError
 	if !errors.As(err, &requestErr) {
 		t.Fatalf("Success() error = %T %[1]v, want RequestFailedError", err)
@@ -80,7 +79,7 @@ func TestCheckAddsRunIDToExistingQuery(t *testing.T) {
 		t.Fatalf("NewUUIDCheck() error = %v", err)
 	}
 
-	if err := check.Success(context.Background(), WithRunID(runID)); err != nil {
+	if err := check.Success(t.Context(), WithRunID(runID)); err != nil {
 		t.Fatalf("Success() error = %v", err)
 	}
 
@@ -121,7 +120,7 @@ func TestCheckMethodsUseExpectedPathsAndBodies(t *testing.T) {
 		t.Fatalf("NewUUIDCheck() error = %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	calls := []struct {
 		name string
 		call func() error
@@ -153,7 +152,7 @@ func TestBadStatusErrorMessageIncludesRequestPath(t *testing.T) {
 	t.Parallel()
 
 	req := httptest.NewRequestWithContext(
-		context.Background(),
+		t.Context(),
 		http.MethodPost,
 		"https://example.com/check/start?rid=abc",
 		http.NoBody,
