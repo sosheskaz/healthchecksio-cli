@@ -1,0 +1,23 @@
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: go mod tidy
+      run: mist exec -- go mod tidy
+      glob: "{go.mod,go.sum,**/*.go}"
+      stage_fixed: true
+
+    - name: actionlint
+      glob: ".github/workflows/**/*.yml"
+      run: mise exec -- actionlint {staged_files}
+
+commit-msg:
+  commands:
+    conventional:
+      run: |
+        commit_msg_file="{1}"
+        pattern='^(feat|fix|refactor|test|docs|chore|build|ci|perf|deps)(\([a-z-]+\))?!?: .+'
+        if ! grep -Eq "$pattern" "$commit_msg_file"; then
+          echo "invalid commit message. use conventional commits: type(scope): subject"
+          exit 1
+        fi
