@@ -1,14 +1,29 @@
+// Package cmd is the package that contains the CLI commands.
 package cmd
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
+	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
+
+type invalidCLIArgsError struct {
+	Arg     string
+	Problem string
+}
+
+func (e *invalidCLIArgsError) Error() string {
+	return fmt.Sprintf("invalid argument: %s (%s)", e.Arg, e.Problem)
+}
+
+var topCommands = make([]func() *cobra.Command, 0)
 
 func rootCmdUsage() string {
 	return fmt.Sprintf(`Usage: %s <check_id> [<signal>]
@@ -17,13 +32,46 @@ func rootCmdUsage() string {
 `, os.Args[0])
 }
 
-var (
-	topCommands = make([]func() *cobra.Command, 0)
-)
-
 func mustWrite(w io.Writer, msg string) {
 	if _, err := w.Write([]byte(msg)); err != nil {
 		panic(err)
+	}
+}
+
+func callbackForSignal(cmd *cobra.Command, check *hc.Check, signal string) (func(context.Context) error, error) {
+	switch signal {
+	case "":
+		return func(ctx context.Context) error {
+			return check.Success(ctx)
+		}, nil
+	case "failure", "fail", "false":
+		return func(ctx context.Context) error {
+			return check.Failure(ctx)
+		}, nil
+	case "success", "true":
+		return func(ctx context.Context) error {
+			return check.Success(ctx)
+		}, nil
+	case "log":
+		return func(ctx context.Context) error {
+			message, err := io.ReadAll(cmd.InOrStdin())
+			if err != nil {
+				return fmt.Errorf("failed to read log message: %w", err)
+			}
+			return check.Log(ctx, string(message))
+		}, nil
+	case "start":
+		return func(ctx context.Context) error {
+			return check.Start(ctx)
+		}, nil
+	default:
+		statusCode, err := strconv.Atoi(signal)
+		if err != nil {
+			return nil, &invalidCLIArgsError{Arg: "signal", Problem: fmt.Sprintf("illegal value %q", signal)}
+		}
+		return func(ctx context.Context) error {
+			return check.CompleteStatus(ctx, statusCode)
+		}, nil
 	}
 }
 
@@ -33,42 +81,46 @@ func rootCommand() *cobra.Command {
 		Short: "Call healthchecks.io checks from the command line",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var (
-				checkId string
+				checkID string
 				signal  string
 			)
 
 			if len(args) == 0 {
 				mustWrite(cmd.ErrOrStderr(), rootCmdUsage())
-				return errors.New("please provide a check id")
+				return &invalidCLIArgsError{"posargs", "check_id not provided"}
 			}
 			if len(args) > 2 {
 				mustWrite(cmd.ErrOrStderr(), rootCmdUsage())
-				return fmt.Errorf("extraneous arguments found: %v", args[2:])
+				return &invalidCLIArgsError{"posargs", "too many arguments"}
 			}
-			checkId = args[0]
+			checkID = args[0]
 			if len(args) > 1 {
 				signal = args[1]
 			}
+			checkUUID, err := uuid.Parse(checkID)
+			if err != nil {
+				return fmt.Errorf("invalid check_id: %w", err)
+			}
 
-			mustWrite(cmd.ErrOrStderr(), "calling check "+checkId)
+			check, err := hc.NewUUIDCheck(checkUUID)
+			if err != nil {
+				return fmt.Errorf("failed to create check: %w", err)
+			}
+
+			callback, err := callbackForSignal(cmd, check, signal)
+			if err != nil {
+				return err
+			}
+
+			if err := callback(cmd.Context()); err != nil {
+				return err
+			}
+
+			mustWrite(cmd.ErrOrStderr(), "calling check "+checkID)
 			if signal != "" {
 				mustWrite(cmd.ErrOrStderr(), " with signal "+signal)
 			}
 			mustWrite(cmd.ErrOrStderr(), "\n")
-
-			url := "https://hc-ping.com/" + checkId
-			if signal != "" {
-				url += "/" + signal
-			}
-
-			resp, err := http.Get(url)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != 200 {
-				return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-			}
 
 			return nil
 		},
@@ -84,10 +136,12 @@ func rootCommand() *cobra.Command {
 	return c
 }
 
+// Command returns the root command for the healthchecksio-cli application.
 func Command() *cobra.Command {
 	return rootCommand()
 }
 
+// Execute runs the root command.
 func Execute() {
 	err := Command().Execute()
 	if err != nil {
