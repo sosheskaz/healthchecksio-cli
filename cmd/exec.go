@@ -1,14 +1,16 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
 
 func execCommand() *cobra.Command {
@@ -16,63 +18,54 @@ func execCommand() *cobra.Command {
 		Use:   "exec [flags] [command...]",
 		Short: "Execute a command and report its status to healthchecks.io",
 		Run: func(cmd *cobra.Command, args []string) {
-			checkId := cmd.Flag("check").Value.String()
-			if checkId == "" {
+			checkID := cmd.Flag("check").Value.String()
+			if checkID == "" {
 				cmd.Println("Please provide a check id")
 				return
 			}
+			checkUUID, err := uuid.Parse(checkID)
+			if err != nil {
+				panic(fmt.Sprintf("check ID %q is not a valid UUID: %+v", checkID, err))
+			}
 
-			subcommand := exec.Command(args[0], args[1:]...)
+			subcommand := exec.CommandContext(cmd.Context(), args[0], args[1:]...) //nolint:gosec // user-provided command
+			subcommand.Stdin = cmd.InOrStdin()
 			subcommand.Stdout = cmd.OutOrStdout()
 			subcommand.Stderr = cmd.ErrOrStderr()
 
-			mustWrite(cmd.ErrOrStderr(), "starting check "+checkId+"\n")
-			if resp, err := http.Get("https://hc-ping.com/" + checkId + "/start"); err != nil {
-				panic(err)
-			} else {
-				defer func() { _ = resp.Body.Close() }()
-				if resp.StatusCode != 200 {
-					bodyData, _ := io.ReadAll(resp.Body)
-					panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", resp.Request.Method, resp.Request.URL, resp.StatusCode, string(bodyData)))
-				}
+			check, err := hc.NewUUIDCheck(checkUUID)
+			if err != nil {
+				panic(fmt.Sprintf("failed to construct check: %+v", err))
+			}
+
+			mustWrite(cmd.ErrOrStderr(), "starting check "+checkID+"\n")
+			if err := check.Start(cmd.Context()); err != nil {
+				panic(fmt.Sprintf("failed to start check: %+v", err))
 			}
 
 			if err := subcommand.Start(); err != nil {
-				panic(err)
+				panic(fmt.Sprintf("failed to start subcommand %q: %+v", strings.Join(subcommand.Args, " "), err))
 			}
 
 			if err := subcommand.Wait(); err != nil {
-				if _, ok := err.(*exec.ExitError); !ok {
+				exitError := &exec.ExitError{}
+				if !errors.As(err, &exitError) {
 					panic(err)
 				}
 			}
 
-			succeeded := subcommand.ProcessState.Success()
+			exitCode := subcommand.ProcessState.ExitCode()
+			mustWrite(cmd.ErrOrStderr(), fmt.Sprintf("completed with exit code %d\n", exitCode))
 
-			var (
-				resp  *http.Response
-				hcErr error
-			)
+			if err := check.CompleteStatus(cmd.Context(), exitCode); err != nil {
+				panic(fmt.Sprintf("failed to complete check: %+v", err))
+			}
 
-			if succeeded {
-				//nolint:errcheck
-				mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
-				resp, hcErr = http.Get("https://hc-ping.com/" + checkId)
-			} else {
-				//nolint:errcheck
+			if exitCode != 0 {
 				mustWrite(cmd.ErrOrStderr(), "check failed\n")
-				resp, hcErr = http.Get("https://hc-ping.com/" + checkId + "/" + strconv.Itoa(subcommand.ProcessState.ExitCode()))
+				os.Exit(exitCode)
 			}
-
-			if hcErr != nil {
-				panic(hcErr)
-			} else if resp.StatusCode != 200 {
-				bodyData, _ := io.ReadAll(resp.Body)
-				panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", resp.Request.Method, resp.Request.URL, resp.StatusCode, string(bodyData)))
-			}
-			defer func() { _ = resp.Body.Close() }()
-
-			os.Exit(subcommand.ProcessState.ExitCode())
+			mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
 		},
 	}
 
