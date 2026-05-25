@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,25 +17,34 @@ func execCommand() *cobra.Command {
 		Use:   "exec [flags] [command...]",
 		Short: "Execute a command and report its status to healthchecks.io",
 		Run: func(cmd *cobra.Command, args []string) {
-			checkId := cmd.Flag("check").Value.String()
-			if checkId == "" {
+			checkID := cmd.Flag("check").Value.String()
+			if checkID == "" {
 				cmd.Println("Please provide a check id")
 				return
 			}
 
-			subcommand := exec.Command(args[0], args[1:]...)
+			subcommand := exec.CommandContext(cmd.Context(), args[0], args[1:]...) //nolint:gosec // user-provided command
 			subcommand.Stdout = cmd.OutOrStdout()
 			subcommand.Stderr = cmd.ErrOrStderr()
 
-			mustWrite(cmd.ErrOrStderr(), "starting check "+checkId+"\n")
-			if resp, err := http.Get("https://hc-ping.com/" + checkId + "/start"); err != nil {
+			mustWrite(cmd.ErrOrStderr(), "starting check "+checkID+"\n")
+			startReq, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, "https://hc-ping.com/"+checkID+"/start", http.NoBody)
+			if err != nil {
 				panic(err)
-			} else {
-				defer func() { _ = resp.Body.Close() }()
-				if resp.StatusCode != 200 {
-					bodyData, _ := io.ReadAll(resp.Body)
-					panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", resp.Request.Method, resp.Request.URL, resp.StatusCode, string(bodyData)))
+			}
+			startResp, err := http.DefaultClient.Do(startReq)
+			if err != nil {
+				panic(err)
+			}
+			defer func() { _ = startResp.Body.Close() }()
+
+			if startResp.StatusCode != http.StatusOK {
+				bodyData, err := io.ReadAll(startResp.Body)
+				if err != nil {
+					panic(fmt.Sprintf("failed to read response body: %+v", err))
 				}
+				req := startResp.Request
+				panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", req.Method, req.URL, startResp.StatusCode, string(bodyData)))
 			}
 
 			if err := subcommand.Start(); err != nil {
@@ -42,7 +52,8 @@ func execCommand() *cobra.Command {
 			}
 
 			if err := subcommand.Wait(); err != nil {
-				if _, ok := err.(*exec.ExitError); !ok {
+				exitError := &exec.ExitError{}
+				if errors.As(err, &exitError) {
 					panic(err)
 				}
 			}
@@ -50,27 +61,38 @@ func execCommand() *cobra.Command {
 			succeeded := subcommand.ProcessState.Success()
 
 			var (
-				resp  *http.Response
-				hcErr error
+				endResp *http.Response
+				hcErr   error
 			)
 
 			if succeeded {
-				//nolint:errcheck
 				mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
-				resp, hcErr = http.Get("https://hc-ping.com/" + checkId)
+				url := "https://hc-ping.com/" + checkID
+				req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, url, http.NoBody)
+				if err != nil {
+					panic(err)
+				}
+				endResp, hcErr = http.DefaultClient.Do(req)
 			} else {
-				//nolint:errcheck
 				mustWrite(cmd.ErrOrStderr(), "check failed\n")
-				resp, hcErr = http.Get("https://hc-ping.com/" + checkId + "/" + strconv.Itoa(subcommand.ProcessState.ExitCode()))
+				url := "https://hc-ping.com/" + checkID + "/" + strconv.Itoa(subcommand.ProcessState.ExitCode())
+				req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, url, http.NoBody)
+				if err != nil {
+					panic(err)
+				}
+				endResp, hcErr = http.DefaultClient.Do(req)
 			}
 
 			if hcErr != nil {
 				panic(hcErr)
-			} else if resp.StatusCode != 200 {
-				bodyData, _ := io.ReadAll(resp.Body)
-				panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", resp.Request.Method, resp.Request.URL, resp.StatusCode, string(bodyData)))
+			} else if endResp.StatusCode != http.StatusOK {
+				bodyData, err := io.ReadAll(endResp.Body)
+				if err != nil {
+					panic(fmt.Sprintf("failed to read response body: %+v", err))
+				}
+				panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", endResp.Request.Method, endResp.Request.URL, endResp.StatusCode, string(bodyData)))
 			}
-			defer func() { _ = resp.Body.Close() }()
+			defer func() { _ = endResp.Body.Close() }()
 
 			os.Exit(subcommand.ProcessState.ExitCode())
 		},
