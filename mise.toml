@@ -1,0 +1,6 @@
+[tools]
+go = "1.25.4"
+golangci-lint = "2.12.2"
+goreleaser = "2.16.0"
+
+"aqua:rhysd/actionlint" = "1.7.12"

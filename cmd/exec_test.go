@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -36,7 +35,7 @@ func TestExecCommandReportsSubcommandExitCode(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	helper := exec.CommandContext(
-		context.Background(),
+		t.Context(),
 		os.Args[0],
 		"-test.run=TestExecCommandHelper",
 		"--",
