@@ -2,9 +2,11 @@
 go = "1.26.3"
 golangci-lint = "2.12.2"
 goreleaser = "2.16.0"
+ko = "0.18.1"
 
 lefthook = "2.1.8"
 "aqua:rhysd/actionlint" = "1.7.12"
 
 node = "24.16.0"
 "npm:renovate" = "43.150.0"
+"npm:release-please" = "17.6.0"
