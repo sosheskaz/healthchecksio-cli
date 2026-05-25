@@ -1,0 +1,37 @@
+name: Renovate
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  pull_request:
+    paths:
+      - renovate.json
+      - mise.toml
+      - .github/workflows/renovate.yml
+  workflow_dispatch:
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          client-id: ${{ vars.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install_args: go node npm:renovate
+          cache: true
+      - run: renovate
+        env:
+          RENOVATE_TOKEN: ${{ steps.app-token.outputs.token }}
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_DRY_RUN: ${{ github.event_name == 'pull_request' && 'full' || '' }}
+          RENOVATE_BASE_BRANCHES: ${{ github.event_name == 'pull_request' && format('["{0}"]', github.head_ref) || '' }}
+          RENOVATE_USE_BASE_BRANCH_CONFIG: ${{ github.event_name == 'pull_request' && 'merge' || '' }}
+          LOG_LEVEL: info

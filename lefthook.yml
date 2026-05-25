@@ -18,6 +18,10 @@ pre-commit:
       glob: ".golangci.{yml,yaml}"
       run: mise exec -- golangci-lint config verify
 
+    - name: renovate-config-validator
+      glob: "renovate.json"
+      run: mise exec -- renovate-config-validator
+
 commit-msg:
   commands:
     conventional:
