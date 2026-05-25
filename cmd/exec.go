@@ -3,12 +3,13 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
+	"slices"
+	"strings"
 
+	"github.com/google/uuid"
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 	"github.com/spf13/cobra"
 )
 
@@ -22,33 +23,27 @@ func execCommand() *cobra.Command {
 				cmd.Println("Please provide a check id")
 				return
 			}
+			checkUUID, err := uuid.Parse(checkID)
+			if err != nil {
+				panic(fmt.Sprintf("check ID %q is not a valid UUID: %+v", checkID, err))
+			}
 
 			subcommand := exec.CommandContext(cmd.Context(), args[0], args[1:]...) //nolint:gosec // user-provided command
 			subcommand.Stdout = cmd.OutOrStdout()
 			subcommand.Stderr = cmd.ErrOrStderr()
 
-			mustWrite(cmd.ErrOrStderr(), "starting check "+checkID+"\n")
-			startReq, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, "https://hc-ping.com/"+checkID+"/start", http.NoBody)
+			check, err := hc.NewUUIDCheck(checkUUID)
 			if err != nil {
-				panic(err)
+				panic(fmt.Sprintf("failed to construct check: %+v", err))
 			}
-			startResp, err := http.DefaultClient.Do(startReq)
-			if err != nil {
-				panic(err)
-			}
-			defer func() { _ = startResp.Body.Close() }()
 
-			if startResp.StatusCode != http.StatusOK {
-				bodyData, err := io.ReadAll(startResp.Body)
-				if err != nil {
-					panic(fmt.Sprintf("failed to read response body: %+v", err))
-				}
-				req := startResp.Request
-				panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", req.Method, req.URL, startResp.StatusCode, string(bodyData)))
+			mustWrite(cmd.ErrOrStderr(), "starting check "+checkID+"\n")
+			if err := check.Start(cmd.Context()); err != nil {
+				panic(fmt.Sprintf("failed to start check: %+v", err))
 			}
 
 			if err := subcommand.Start(); err != nil {
-				panic(err)
+				panic(fmt.Sprintf("failed to start subcommand %q: %+v", strings.Join(slices.Concat([]string{subcommand.Path}, subcommand.Args), " "), err))
 			}
 
 			if err := subcommand.Wait(); err != nil {
@@ -58,43 +53,17 @@ func execCommand() *cobra.Command {
 				}
 			}
 
-			succeeded := subcommand.ProcessState.Success()
+			exitCode := subcommand.ProcessState.ExitCode()
+			mustWrite(cmd.ErrOrStderr(), fmt.Sprintf("completed with exit code %d", err))
 
-			var (
-				endResp *http.Response
-				hcErr   error
-			)
-
-			if succeeded {
-				mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
-				url := "https://hc-ping.com/" + checkID
-				req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, url, http.NoBody)
-				if err != nil {
-					panic(err)
-				}
-				endResp, hcErr = http.DefaultClient.Do(req)
-			} else {
-				mustWrite(cmd.ErrOrStderr(), "check failed\n")
-				url := "https://hc-ping.com/" + checkID + "/" + strconv.Itoa(subcommand.ProcessState.ExitCode())
-				req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, url, http.NoBody)
-				if err != nil {
-					panic(err)
-				}
-				endResp, hcErr = http.DefaultClient.Do(req)
+			if err := check.CompleteStatus(cmd.Context(), exitCode); err != nil {
+				panic(fmt.Sprintf("failed to complete check: %+v", err))
 			}
+			mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
 
-			if hcErr != nil {
-				panic(hcErr)
-			} else if endResp.StatusCode != http.StatusOK {
-				bodyData, err := io.ReadAll(endResp.Body)
-				if err != nil {
-					panic(fmt.Sprintf("failed to read response body: %+v", err))
-				}
-				panic(fmt.Sprintf("received unexpected status code from %s %s: %d\n%s", endResp.Request.Method, endResp.Request.URL, endResp.StatusCode, string(bodyData)))
+			if exitCode != 0 {
+				os.Exit(exitCode)
 			}
-			defer func() { _ = endResp.Body.Close() }()
-
-			os.Exit(subcommand.ProcessState.ExitCode())
 		},
 	}
 

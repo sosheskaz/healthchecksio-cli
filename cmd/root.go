@@ -2,11 +2,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
+	"strconv"
 
+	"github.com/google/uuid"
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 	"github.com/spf13/cobra"
 )
 
@@ -17,18 +20,6 @@ type invalidCLIArgsError struct {
 
 func (e *invalidCLIArgsError) Error() string {
 	return fmt.Sprintf("invalid argument: %s (%s)", e.Arg, e.Problem)
-}
-
-type healthChecksIOError struct {
-	err        error
-	StatusCode int
-}
-
-func (e *healthChecksIOError) Error() string {
-	if e.err != nil {
-		return fmt.Sprintf("healthchecks.io error: %+v", e.err)
-	}
-	return fmt.Sprintf("healthchecks.io error: status code %d", e.StatusCode)
 }
 
 var topCommands = make([]func() *cobra.Command, 0)
@@ -68,30 +59,57 @@ func rootCommand() *cobra.Command {
 			if len(args) > 1 {
 				signal = args[1]
 			}
+			checkUUID, err := uuid.Parse(checkID)
+			if err != nil {
+				return fmt.Errorf("invalid check_id: %w", err)
+			}
+
+			check, err := hc.NewUUIDCheck(checkUUID)
+			if err != nil {
+				return fmt.Errorf("failed to create check: %w", err)
+			}
+
+			var callback func(context.Context) error
+			switch signal {
+			case "":
+				callback = func(ctx context.Context) error {
+					return check.Success(ctx)
+				}
+			case "failure", "fail", "false":
+				callback = func(ctx context.Context) error {
+					return check.Failure(ctx)
+				}
+			case "success", "true":
+				callback = func(ctx context.Context) error {
+					return check.Success(ctx)
+				}
+			case "log":
+				callback = func(ctx context.Context) error {
+					message, err := io.ReadAll(cmd.InOrStdin())
+					if err != nil {
+						return fmt.Errorf("failed to read log message: %w", err)
+					}
+					return check.Log(ctx, string(message))
+				}
+			default:
+				statusCode, err := strconv.Atoi(signal)
+				if err != nil {
+					return &invalidCLIArgsError{Arg: "signal", Problem: fmt.Sprintf("illegal value %q", signal)}
+				}
+				callback = func(ctx context.Context) error {
+					return check.CompleteStatus(ctx, statusCode)
+				}
+			}
+
+			if err := callback(cmd.Context()); err != nil {
+				return err
+			}
 
 			mustWrite(cmd.ErrOrStderr(), "calling check "+checkID)
 			if signal != "" {
 				mustWrite(cmd.ErrOrStderr(), " with signal "+signal)
 			}
 			mustWrite(cmd.ErrOrStderr(), "\n")
-
-			url := "https://hc-ping.com/" + checkID
-			if signal != "" {
-				url += "/" + signal
-			}
-
-			req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, url, http.NoBody)
-			if err != nil {
-				return fmt.Errorf("failed to create request: %w", err)
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				return fmt.Errorf("failed to GET %q: %w", url, err)
-			}
-			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != http.StatusOK {
-				return &healthChecksIOError{StatusCode: resp.StatusCode}
-			}
 
 			return nil
 		},

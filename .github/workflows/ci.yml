@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
-          install_args: 'go golangci-lint goreleaser'
+          install_args: 'go golangci-lint'
       - name: Setup Golang caches
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -46,6 +46,13 @@ jobs:
           golangci-lint run --output.text.path=stdout --output.text.print-issued-lines=false --output.text.colors=false
           echo "::remove-matcher owner=golangci-lint::"
 
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install_args: 'go goreleaser'
       - name: Check goreleaser
         run: |
           goreleaser check
