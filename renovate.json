@@ -24,11 +24,13 @@
     {
       "matchManagers": ["github-actions"],
       "semanticCommitScope": "actions",
+      "semanticCommitType": "ci",
       "pinDigests": true
     },
     {
       "matchManagers": ["mise"],
-      "semanticCommitScope": "mise"
+      "semanticCommitScope": "mise",
+      "semanticCommitType": "ci"
     },
     {
       "matchManagers": ["gomod"],
@@ -38,7 +40,8 @@
       "matchManagers": ["mise", "gomod"],
       "matchDepNames": ["go"],
       "groupName": "go",
-      "semanticCommitScope": "go"
+      "semanticCommitScope": "go",
+      "semanticCommitType": "deps"
     }
   ]
 }
