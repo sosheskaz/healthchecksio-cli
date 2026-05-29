@@ -25,7 +25,8 @@
       "matchManagers": ["github-actions"],
       "semanticCommitScope": "actions",
       "semanticCommitType": "ci",
-      "pinDigests": true
+      "pinDigests": true,
+      "versioning": "semver"
     },
     {
       "matchManagers": ["mise"],
