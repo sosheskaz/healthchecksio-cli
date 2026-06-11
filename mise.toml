@@ -9,4 +9,4 @@ lefthook = "2.1.9"
 
 node = "24.16.0"
 "npm:renovate" = "43.210.2"
-"npm:release-please" = "17.6.1"
+"npm:release-please" = "17.7.0"
