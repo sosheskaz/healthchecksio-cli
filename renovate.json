@@ -26,12 +26,19 @@
       "semanticCommitScope": "actions",
       "semanticCommitType": "ci",
       "pinDigests": true,
-      "versioning": "semver"
+      "versioning": "semver",
+      "automerge": true
     },
     {
       "matchManagers": ["mise"],
       "semanticCommitScope": "mise",
       "semanticCommitType": "ci"
+    },
+    {
+      "matchManagers": ["mise"],
+      "matchDepNames": ["!go"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
     },
     {
       "matchManagers": ["gomod"],
