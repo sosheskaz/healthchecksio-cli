@@ -7,6 +7,6 @@ ko = "0.18.1"
 lefthook = "2.1.9"
 "aqua:rhysd/actionlint" = "1.7.12"
 
-node = "24.16.0"
+node = "24.17.0"
 "npm:renovate" = "43.227.1"
 "npm:release-please" = "17.9.0"
