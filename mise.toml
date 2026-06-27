@@ -8,5 +8,5 @@ lefthook = "2.1.9"
 "aqua:rhysd/actionlint" = "1.7.12"
 
 node = "24.17.0"
-"npm:renovate" = "43.228.0"
+"npm:renovate" = "43.233.3"
 "npm:release-please" = "17.9.0"
