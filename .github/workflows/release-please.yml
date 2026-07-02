@@ -5,22 +5,34 @@ on:
       - update-builds
   workflow_dispatch:
 
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  packages: write
-
 name: release-please
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Scoped to exactly what this job uses; packages:write belongs to the
+    # goreleaser job call below, not here (a workflow-level block would grant
+    # it to both).
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    # Job-level so serialization covers only the release-please action, not
+    # the nested (long) release job; never cancel a run that may be tagging.
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
       - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
           install_args: 'node npm:release-please'
+          # This job doesn't build artifacts from cached toolchains; a
+          # release-tagging job shouldn't trust a PR-writable cache anyway.
+          cache: false
       - id: release-please
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
@@ -29,10 +41,18 @@ jobs:
     outputs:
       releases_created: ${{ steps.release-please.outputs.releases_created }}
       tag_name: ${{ steps.release-please.outputs.tag_name }}
+  # GITHUB_TOKEN flows to called workflows automatically; only BREW_PAT (a
+  # real repo secret release.yml needs for homebrew-tap) is passed explicitly
+  # instead of secrets: inherit, which would hand it every repo secret.
   goreleaser:
+    name: Release
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     uses: ./.github/workflows/release.yml
-    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+    secrets:
+      BREW_PAT: ${{ secrets.BREW_PAT }}
     with:
       release_tag: ${{ needs.release-please.outputs.tag_name }}
