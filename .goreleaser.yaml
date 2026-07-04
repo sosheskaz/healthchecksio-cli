@@ -18,6 +18,13 @@ builds:
       - darwin
     flags:
       - -trimpath
+    # CommitDate/CommitTimestamp (not build time) keep builds reproducible.
+    ldflags:
+      - -s -w
+      - -X github.com/sosheskaz/healthchecksio-cli/internal/version.version={{ .Version }}
+      - -X github.com/sosheskaz/healthchecksio-cli/internal/version.commit={{ .FullCommit }}
+      - -X github.com/sosheskaz/healthchecksio-cli/internal/version.date={{ .CommitDate }}
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:
   - formats: [tar.gz]

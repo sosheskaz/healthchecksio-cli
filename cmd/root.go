@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
+	"github.com/sosheskaz/healthchecksio-cli/internal/version"
 )
 
 type invalidCLIArgsError struct {
@@ -77,8 +78,9 @@ func callbackForSignal(cmd *cobra.Command, check *hc.Check, signal string) (func
 
 func rootCommand() *cobra.Command {
 	c := &cobra.Command{
-		Use:   "healthchecksio-cli <check_id> [<signal>]",
-		Short: "Call healthchecks.io checks from the command line",
+		Use:     "healthchecksio-cli <check_id> [<signal>]",
+		Short:   "Call healthchecks.io checks from the command line",
+		Version: version.Get().String(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var (
 				checkID string
