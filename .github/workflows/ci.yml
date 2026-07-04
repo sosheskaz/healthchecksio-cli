@@ -1,22 +1,46 @@
 name: CI
 
 on:
-  pull_request:
+  pull_request: {}
   push:
     branches:
       - main
+  # Weekly run on an unchanged main: new CVEs surface without code changes
+  # (govulncheck), and the coverage baseline artifact stays fresh.
+  schedule:
+    - cron: '0 14 * * 1'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || '' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   CGO_ENABLED: '0'
+  GOTOOLCHAIN: local
 
 jobs:
   go:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # download the coverage baseline from main runs
+      pull-requests: write # sticky coverage comment
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      # Compiler-shaped output (file:line:col: message) from build, tidy,
+      # test, race, and bench steps below shares one shape with this matcher.
+      - name: Register problem matcher
+        run: echo "::add-matcher::.github/problem-matchers/go.json"
+
       - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
         with:
-          install_args: 'go golangci-lint'
+          install_args: 'go golangci-lint go:golang.org/x/vuln/cmd/govulncheck'
+
       - name: Setup Golang caches
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -24,12 +48,19 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: ${{ runner.os }}-golang-${{ hashFiles('**/go.sum') }}
+          # Arch in the key: harmless today on single-arch ubuntu-latest, but
+          # forward-compatible if an arm64 runner is ever added — go-build
+          # cache entries are GOARCH-specific and a cross-arch restore is all
+          # misses followed by clobbering the shared key with foreign objects.
+          key: ${{ runner.os }}-${{ runner.arch }}-golang-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-golang-
+            ${{ runner.os }}-${{ runner.arch }}-golang-
 
       - name: Mod download
         run: go mod download
+
+      - name: Verify module integrity
+        run: go mod verify
 
       - name: Build
         run: go build ./...
@@ -38,7 +69,18 @@ jobs:
         run: go mod tidy -diff -v
 
       - name: Test
-        run: go test -v ./...
+        run: go test -shuffle=on -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
+
+      - name: Test (race detector)
+        env:
+          CGO_ENABLED: '1'
+        run: go test -race -shuffle=on ./...
+
+      - name: Benchmark smoke test
+        run: go test -run='^$' -bench=. -benchtime=1x ./...
+
+      - name: Vulnerability scan
+        run: govulncheck ./...
 
       - name: Lint
         run: |
@@ -46,29 +88,83 @@ jobs:
           golangci-lint run --output.text.path=stdout --output.text.print-issued-lines=false --output.text.colors=false
           echo "::remove-matcher owner=golangci-lint::"
 
-  goreleaser:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+      - name: Publish coverage baseline
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          install_args: 'go goreleaser'
+          name: coverage-main
+          path: coverage.out
+          retention-days: 90
 
-      - name: Check goreleaser
+      - name: Fetch coverage baseline from main
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          goreleaser check
-          goreleaser release --snapshot --clean
+          run_id="$(gh run list --workflow ci.yml --branch main --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --name coverage-main --dir .coverage-base \
+              || echo "::notice::no coverage-main artifact on run ${run_id}; reporting without delta"
+          else
+            echo "::notice::no successful main CI run found; reporting without delta"
+          fi
+          if [ -f .coverage-base/coverage.out ]; then
+            mv .coverage-base/coverage.out coverage-base.out
+          fi
+
+      - name: Coverage report
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: mise run report:coverage coverage.out coverage-base.out
 
   pre-commit:
     name: Pre-commit hooks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
       - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+
+      - name: Register problem matchers
+        run: |
+          echo "::add-matcher::.github/problem-matchers/actionlint.json"
+          echo "::add-matcher::.github/problem-matchers/shellcheck-gcc.json"
 
       - name: Run lefthook pre-commit
         env:
           MISE_EXEC_AUTO_INSTALL: "false"
           MISE_TASK_RUN_AUTO_INSTALL: "false"
           YAMLLINT_FORMAT: github
-        run: lefthook run --all-files pre-commit
+          # Feeds the shellcheck problem matcher; deliberately NOT
+          # SHELLCHECK_OPTS, which would break actionlint's embedded
+          # JSON-mode shellcheck.
+          SHELLCHECK_FORMAT: gcc
+          # Covered more strictly by the go job (go mod tidy -diff fails on
+          # drift; lefthook's local hook only auto-fixes for convenience).
+          LEFTHOOK_EXCLUDE: go-mod-tidy
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            mapfile -t files < <(git diff --name-only --diff-filter=ACMR "$base" "$head")
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "no changed files; skipping"
+              exit 0
+            fi
+            args=()
+            for f in "${files[@]}"; do
+              args+=(--file "$f")
+            done
+            lefthook run pre-commit "${args[@]}"
+          else
+            lefthook run pre-commit --all-files
+          fi
