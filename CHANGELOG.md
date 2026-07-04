@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.1.5...v1.2.0) (2026-07-04)
+
+
+### Features
+
+* report build version at runtime via --version ([#72](https://github.com/sosheskaz/healthchecksio-cli/issues/72)) ([737e255](https://github.com/sosheskaz/healthchecksio-cli/commit/737e255bd19f907bd4888a8292ae78e6130694cd))
+
 ## [1.1.5](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.1.4...v1.1.5) (2026-06-11)
 
 
