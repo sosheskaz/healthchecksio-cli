@@ -71,6 +71,8 @@ changelog:
 
 kos:
   - repositories: [ghcr.io/sosheskaz/healthchecksio-cli]
+    # Disabled for snapshot builds so PR validation never pushes.
+    disable: "{{ .IsSnapshot }}"
     tags:
       - "{{.Version}}"
       - "{{.Major}}"
