@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -86,8 +87,7 @@ func TestExecCommandHelper(t *testing.T) {
 		if len(args) != 4 {
 			t.Fatalf("exec helper got args %v, want exec <server-url> <check-id>", args[1:])
 		}
-		routeHealthchecksTo(t, args[2])
-		runExecCommandHelper(t, args[3])
+		runExecCommandHelper(t, args[2], args[3])
 	case "exit":
 		if len(args) != 3 {
 			t.Fatalf("exit helper got args %v, want exit <code>", args[1:])
@@ -97,23 +97,41 @@ func TestExecCommandHelper(t *testing.T) {
 			t.Fatalf("strconv.Atoi(%q) error = %v", args[2], err)
 		}
 		os.Exit(code)
+	case "sleep-exit":
+		if len(args) != 4 {
+			t.Fatalf("sleep-exit helper got args %v, want sleep-exit <duration> <code>", args[1:])
+		}
+		delay, err := time.ParseDuration(args[2])
+		if err != nil {
+			t.Fatalf("time.ParseDuration(%q) error = %v", args[2], err)
+		}
+		code, err := strconv.Atoi(args[3])
+		if err != nil {
+			t.Fatalf("strconv.Atoi(%q) error = %v", args[3], err)
+		}
+		time.Sleep(delay)
+		os.Exit(code)
 	default:
 		t.Fatalf("unknown helper mode %q", args[1])
 	}
 }
 
-func runExecCommandHelper(t *testing.T, checkID string) {
+func runExecCommandHelper(t *testing.T, serverURL, checkID string) {
 	t.Helper()
 
-	cmd := execCommand()
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, serverURL))
 	cmd.SetArgs([]string{
+		"exec",
+		"--total-ping-timeout",
+		"25ms",
 		"--check",
 		checkID,
 		"--",
 		os.Args[0],
 		"-test.run=TestExecCommandHelper",
 		"--",
-		"exit",
+		"sleep-exit",
+		"100ms",
 		"7",
 	})
 	cmd.SetOut(&bytes.Buffer{})

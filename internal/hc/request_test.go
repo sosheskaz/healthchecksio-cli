@@ -166,3 +166,34 @@ func TestBadStatusErrorMessageIncludesRequestPath(t *testing.T) {
 		t.Fatalf("Error() = %q, want %q", got, want)
 	}
 }
+
+func TestNewSlugCheckUsesInjectedClient(t *testing.T) {
+	t.Parallel()
+
+	requestURL := make(chan string, 1)
+	client := &http.Client{Transport: requestRoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		requestURL <- req.URL.String()
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Request: req}, nil
+	})}
+	check, err := NewSlugCheck(
+		"pingkey",
+		"myslug",
+		WithBaseURL("https://hc-ping.invalid"),
+		WithHTTPClient(client),
+	)
+	if err != nil {
+		t.Fatalf("NewSlugCheck() error = %v", err)
+	}
+	if err := check.Success(t.Context()); err != nil {
+		t.Fatalf("Success() error = %v", err)
+	}
+	if got, want := <-requestURL, "https://hc-ping.invalid/pingkey/myslug"; got != want {
+		t.Fatalf("request URL = %q, want %q", got, want)
+	}
+}
+
+type requestRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f requestRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}

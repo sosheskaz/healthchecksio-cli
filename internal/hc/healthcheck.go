@@ -4,6 +4,7 @@ package hc
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 
@@ -16,6 +17,7 @@ const (
 )
 
 type checkOptions struct {
+	client  *http.Client
 	baseURL string
 }
 
@@ -29,8 +31,16 @@ func WithBaseURL(baseURL string) CheckOption {
 	}
 }
 
+// WithHTTPClient sets the HTTP client used for check requests.
+func WithHTTPClient(client *http.Client) CheckOption {
+	return func(c *checkOptions) {
+		c.client = client
+	}
+}
+
 // Check represents a health check on a service.
 type Check struct {
+	client   *http.Client
 	checkURL string
 }
 
@@ -56,6 +66,7 @@ func NewUUIDCheck(id uuid.UUID, opts ...CheckOption) (*Check, error) {
 
 	return &Check{
 		checkURL: checkURL,
+		client:   options.client,
 	}, nil
 }
 
@@ -85,13 +96,14 @@ func NewSlugCheck(pingKey, slug string, opts ...CheckOption) (*Check, error) {
 
 	return &Check{
 		checkURL: checkURL,
+		client:   options.client,
 	}, nil
 }
 
 // Success sends a success ping to the healthchecks.io API.
 func (c *Check) Success(ctx context.Context, opts ...RequestOption) error {
 	successURL := c.checkURL
-	return simpleHandleURL(ctx, successURL, opts...)
+	return simpleHandleURL(ctx, c.httpClient(), successURL, opts...)
 }
 
 // Start sends a start ping to the healthchecks.io API.
@@ -100,7 +112,7 @@ func (c *Check) Start(ctx context.Context, opts ...RequestOption) error {
 	if err != nil {
 		return BadConfigError{Message: fmt.Sprintf("failed to construct URL from %q and %q: %+v", c.checkURL, "start", err)}
 	}
-	return simpleHandleURL(ctx, startURL, opts...)
+	return simpleHandleURL(ctx, c.httpClient(), startURL, opts...)
 }
 
 // Failure sends a failure ping to the healthchecks.io API.
@@ -110,7 +122,7 @@ func (c *Check) Failure(ctx context.Context, opts ...RequestOption) error {
 		return BadConfigError{Message: fmt.Sprintf("failed to construct URL from %q and %q: %+v", c.checkURL, "fail", err)}
 	}
 
-	return simpleHandleURL(ctx, failureURL, opts...)
+	return simpleHandleURL(ctx, c.httpClient(), failureURL, opts...)
 }
 
 // Log sends a log message to the healthchecks.io API.
@@ -124,7 +136,7 @@ func (c *Check) Log(ctx context.Context, message string, opts ...RequestOption) 
 		o.diagnostics = message
 	}))
 
-	return simpleHandleURL(ctx, logURL, opts...)
+	return simpleHandleURL(ctx, c.httpClient(), logURL, opts...)
 }
 
 // CompleteStatus sends a status ping to the healthchecks.io API with the given exit code.
@@ -135,5 +147,12 @@ func (c *Check) CompleteStatus(ctx context.Context, status int, opts ...RequestO
 		return BadConfigError{Message: fmt.Sprintf("failed to construct URL from %q and %q: %+v", c.checkURL, statusPath, err)}
 	}
 
-	return simpleHandleURL(ctx, completeURL, opts...)
+	return simpleHandleURL(ctx, c.httpClient(), completeURL, opts...)
+}
+
+func (c *Check) httpClient() *http.Client {
+	if c.client != nil {
+		return c.client
+	}
+	return http.DefaultClient
 }

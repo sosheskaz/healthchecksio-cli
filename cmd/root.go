@@ -24,7 +24,7 @@ func (e *invalidCLIArgsError) Error() string {
 	return fmt.Sprintf("invalid argument: %s (%s)", e.Arg, e.Problem)
 }
 
-var topCommands = make([]func() *cobra.Command, 0)
+var topCommands = make([]func(*pingOptions, pingClientFactory) *cobra.Command, 0)
 
 func rootCmdUsage() string {
 	return fmt.Sprintf(`Usage: %s <check_id> [<signal>]
@@ -54,11 +54,11 @@ func callbackForSignal(cmd *cobra.Command, check *hc.Check, signal string) (func
 			return check.Success(ctx)
 		}, nil
 	case "log":
+		message, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return nil, fmt.Errorf("failed to read log message: %w", err)
+		}
 		return func(ctx context.Context) error {
-			message, err := io.ReadAll(cmd.InOrStdin())
-			if err != nil {
-				return fmt.Errorf("failed to read log message: %w", err)
-			}
 			return check.Log(ctx, string(message))
 		}, nil
 	case "start":
@@ -77,10 +77,18 @@ func callbackForSignal(cmd *cobra.Command, check *hc.Check, signal string) (func
 }
 
 func rootCommand() *cobra.Command {
+	return rootCommandWithClientFactory(hc.NewRetryingHTTPClient)
+}
+
+func rootCommandWithClientFactory(clientFactory pingClientFactory) *cobra.Command {
+	pingOpts := defaultPingOptions()
 	c := &cobra.Command{
 		Use:     "healthchecksio-cli <check_id> [<signal>]",
 		Short:   "Call healthchecks.io checks from the command line",
 		Version: version.Get().String(),
+		PersistentPreRunE: func(*cobra.Command, []string) error {
+			return pingOpts.validate()
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var (
 				checkID string
@@ -104,7 +112,7 @@ func rootCommand() *cobra.Command {
 				return fmt.Errorf("invalid check_id: %w", err)
 			}
 
-			check, err := hc.NewUUIDCheck(checkUUID)
+			check, err := pingOpts.newCheck(checkUUID, clientFactory)
 			if err != nil {
 				return fmt.Errorf("failed to create check: %w", err)
 			}
@@ -114,7 +122,7 @@ func rootCommand() *cobra.Command {
 				return err
 			}
 
-			if err := callback(cmd.Context()); err != nil {
+			if err := pingOpts.call(cmd.Context(), callback); err != nil {
 				return err
 			}
 
@@ -129,8 +137,18 @@ func rootCommand() *cobra.Command {
 	}
 
 	for _, topCmd := range topCommands {
-		c.AddCommand(topCmd())
+		c.AddCommand(topCmd(pingOpts, clientFactory))
 	}
+
+	c.PersistentFlags().IntVar(
+		&pingOpts.attempts,
+		"attempts",
+		defaultAttempts,
+		"Total HTTP attempts per ping (0 retries indefinitely within the total ping timeout)",
+	)
+	c.PersistentFlags().DurationVar(&pingOpts.retryMaxBackoff, "retry-max-backoff", defaultRetryMaxBackoff, "Maximum delay between ping attempts")
+	c.PersistentFlags().DurationVar(&pingOpts.connectionTimeout, "connection-timeout", defaultConnectionTimeout, "Timeout for ping connection and TLS setup")
+	c.PersistentFlags().DurationVar(&pingOpts.totalPingTimeout, "total-ping-timeout", defaultTotalPingTimeout, "Total timeout for each ping operation")
 
 	c.InitDefaultCompletionCmd()
 	c.Args = cobra.RangeArgs(1, 2)
