@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.2.1...v1.3.0) (2026-07-22)
+
+
+### Features
+
+* add configurable ping retries ([#91](https://github.com/sosheskaz/healthchecksio-cli/issues/91)) ([667492c](https://github.com/sosheskaz/healthchecksio-cli/commit/667492c2b77c0449500f2cf62bc680b0249e5a36))
+
 ## [1.2.1](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.2.0...v1.2.1) (2026-07-22)
 
 
