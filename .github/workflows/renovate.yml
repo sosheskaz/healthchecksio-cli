@@ -61,6 +61,7 @@ jobs:
           permission-workflows: write
           permission-checks: read
           permission-statuses: write
+          permission-vulnerability-alerts: read
 
       # The dry-run resolves the config *name* from the default branch, so it
       # cannot work until renovate.json exists there (bootstrap PRs would fail
