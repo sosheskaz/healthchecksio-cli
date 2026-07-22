@@ -46,7 +46,7 @@ func addRunID(urlStr, runID string) (string, error) {
 	return parsedURL.String(), nil
 }
 
-func simpleHandleURL(ctx context.Context, urlStr string, opts ...RequestOption) error {
+func simpleHandleURL(ctx context.Context, client *http.Client, urlStr string, opts ...RequestOption) error {
 	options := new(requestOptions)
 	for _, opt := range opts {
 		opt(options)
@@ -69,7 +69,7 @@ func simpleHandleURL(ctx context.Context, urlStr string, opts ...RequestOption) 
 		return BadConfigError{Message: fmt.Sprintf("failed to construct valid HTTP Request to %q: %+v", urlStr, err)}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return RequestFailedError{Req: req, Err: err}
 	}

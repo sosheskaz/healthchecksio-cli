@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
 
 type rewriteTransport struct {
@@ -28,7 +30,7 @@ func (t rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func routeHealthchecksTo(t *testing.T, targetURL string) {
+func routeHealthchecksTo(t *testing.T, targetURL string) pingClientFactory {
 	t.Helper()
 
 	parsed, err := url.Parse(targetURL)
@@ -36,18 +38,17 @@ func routeHealthchecksTo(t *testing.T, targetURL string) {
 		t.Fatalf("url.Parse(%q) error = %v", targetURL, err)
 	}
 
-	previousTransport := http.DefaultTransport
-	http.DefaultTransport = rewriteTransport{
-		target: parsed,
-		base:   previousTransport,
+	return func(hc.RetryConfig) (*http.Client, error) {
+		return &http.Client{Transport: rewriteTransport{
+			target: parsed,
+			base:   http.DefaultTransport,
+		}}, nil
 	}
-	t.Cleanup(func() {
-		http.DefaultTransport = previousTransport
-	})
 }
 
-//nolint:paralleltest // mutates process-wide http.DefaultTransport for command HTTP routing.
 func TestRootCommandAcceptsStartSignal(t *testing.T) {
+	t.Parallel()
+
 	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000006")
 	requestPath := make(chan string, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,9 +56,8 @@ func TestRootCommandAcceptsStartSignal(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
-	routeHealthchecksTo(t, server.URL)
 
-	cmd := rootCommand()
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
 	cmd.SetArgs([]string{checkID.String(), "start"})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})

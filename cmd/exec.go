@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,11 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
-
-	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
 
-func execCommand() *cobra.Command {
+func execCommand(pingOpts *pingOptions, clientFactory pingClientFactory) *cobra.Command {
 	c := &cobra.Command{
 		Use:   "exec [flags] [command...]",
 		Short: "Execute a command and report its status to healthchecks.io",
@@ -33,13 +32,15 @@ func execCommand() *cobra.Command {
 			subcommand.Stdout = cmd.OutOrStdout()
 			subcommand.Stderr = cmd.ErrOrStderr()
 
-			check, err := hc.NewUUIDCheck(checkUUID)
+			check, err := pingOpts.newCheck(checkUUID, clientFactory)
 			if err != nil {
 				panic(fmt.Sprintf("failed to construct check: %+v", err))
 			}
 
 			mustWrite(cmd.ErrOrStderr(), "starting check "+checkID+"\n")
-			if err := check.Start(cmd.Context()); err != nil {
+			if err := pingOpts.call(cmd.Context(), func(ctx context.Context) error {
+				return check.Start(ctx)
+			}); err != nil {
 				panic(fmt.Sprintf("failed to start check: %+v", err))
 			}
 
@@ -57,7 +58,9 @@ func execCommand() *cobra.Command {
 			exitCode := subcommand.ProcessState.ExitCode()
 			mustWrite(cmd.ErrOrStderr(), fmt.Sprintf("completed with exit code %d\n", exitCode))
 
-			if err := check.CompleteStatus(cmd.Context(), exitCode); err != nil {
+			if err := pingOpts.call(cmd.Context(), func(ctx context.Context) error {
+				return check.CompleteStatus(ctx, exitCode)
+			}); err != nil {
 				panic(fmt.Sprintf("failed to complete check: %+v", err))
 			}
 
