@@ -144,7 +144,7 @@ func rootCommandWithClientFactory(clientFactory pingClientFactory) *cobra.Comman
 		&pingOpts.attempts,
 		"attempts",
 		defaultAttempts,
-		"Total HTTP attempts per ping (0 retries indefinitely within the total ping timeout)",
+		"Total HTTP attempts per ping (0 to retry indefinitely within the total ping timeout)",
 	)
 	c.PersistentFlags().DurationVar(&pingOpts.retryMaxBackoff, "retry-max-backoff", defaultRetryMaxBackoff, "Maximum delay between ping attempts")
 	c.PersistentFlags().DurationVar(&pingOpts.connectionTimeout, "connection-timeout", defaultConnectionTimeout, "Timeout for ping connection and TLS setup")
