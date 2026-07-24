@@ -18,5 +18,5 @@ yamllint = "1.38.0"
 zizmor = "1.27.0"
 
 node = "24.18.0"
-"npm:renovate" = "43.264.2"
+"npm:renovate" = "43.265.4"
 "npm:release-please" = "17.10.3"
