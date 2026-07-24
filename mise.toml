@@ -1,3 +1,9 @@
+# mise 2026.7.12 switched the npm backend to install in-process via embedded
+# aube, which fails to resolve deps for renovate/release-please. Route npm
+# installs back through the npm CLI until the aube resolver handles them.
+[settings]
+npm.shell_out = true
+
 [tools]
 go = "1.26.5"
 golangci-lint = "2.12.2"
