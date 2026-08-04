@@ -17,6 +17,6 @@ lefthook = "2.1.10"
 yamllint = "1.38.0"
 zizmor = "1.28.0"
 
-node = "24.18.0"
+node = "24.18.1"
 "npm:renovate" = "43.281.1"
 "npm:release-please" = "17.10.4"
