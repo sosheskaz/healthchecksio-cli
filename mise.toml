@@ -19,4 +19,4 @@ zizmor = "1.28.0"
 
 node = "24.18.0"
 "npm:renovate" = "43.288.0"
-"npm:release-please" = "17.11.0"
+"npm:release-please" = "17.11.1"
