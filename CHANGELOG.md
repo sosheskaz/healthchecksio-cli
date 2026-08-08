@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.3.0...v1.4.0) (2026-08-08)
+
+
+### Features
+
+* support configuration from environment ([#124](https://github.com/sosheskaz/healthchecksio-cli/issues/124)) ([b2cef3a](https://github.com/sosheskaz/healthchecksio-cli/commit/b2cef3a9c8dc84ec0cb1289343c02cb0e3b25673))
+
 ## [1.3.0](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.2.1...v1.3.0) (2026-07-22)
 
 
