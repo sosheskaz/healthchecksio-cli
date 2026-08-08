@@ -8,10 +8,22 @@ Usage:
 healthchecksio-cli <check_id> [<signal>]
 ```
 
+The check ID can also be supplied with `HEALTHCHECKSIO_CHECK_ID`:
+
+```bash
+HEALTHCHECKSIO_CHECK_ID=<check_id> healthchecksio-cli [<signal>]
+```
+
 or run a command and report its exit status:
 
 ```bash
 healthchecksio-cli exec --check <check_id> -- <command> [args...]
+```
+
+or:
+
+```bash
+HEALTHCHECKSIO_CHECK_ID=<check_id> healthchecksio-cli exec -- <command> [args...]
 ```
 
 or
@@ -22,6 +34,21 @@ docker run --rm ghcr.io/sosheskaz/healthchecksio-cli <check_id> [<signal>]
 
 `signal` is optional. Supported values are `start`, `success`, `failure`, `fail`, `true`, `false`,
 `log`, or a numeric exit status.
+
+## Environment configuration
+
+Explicit flags and positional arguments override environment variables. Environment variables
+override compiled defaults. An empty environment variable is treated as unset.
+
+| Environment variable | Equivalent input | Default |
+| --- | --- | --- |
+| `HEALTHCHECKSIO_CHECK_ID` | `<check_id>` or `exec --check` | None |
+| `HEALTHCHECKSIO_ATTEMPTS` | `--attempts` | `5` |
+| `HEALTHCHECKSIO_RETRY_MAX_BACKOFF` | `--retry-max-backoff` | `30s` |
+| `HEALTHCHECKSIO_CONNECTION_TIMEOUT` | `--connection-timeout` | `5s` |
+| `HEALTHCHECKSIO_TOTAL_PING_TIMEOUT` | `--total-ping-timeout` | `5m` |
+
+Duration values use Go duration syntax, such as `500ms`, `30s`, or `5m`.
 
 ## Retry and timeout options
 

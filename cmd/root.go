@@ -27,10 +27,10 @@ func (e *invalidCLIArgsError) Error() string {
 var topCommands = make([]func(*pingOptions, pingClientFactory) *cobra.Command, 0)
 
 func rootCmdUsage() string {
-	return fmt.Sprintf(`Usage: %s <check_id> [<signal>]
-  <check_id> - The check id to be used
+	return fmt.Sprintf(`Usage: %s [<check_id>] [<signal>]
+  <check_id> - The check id to be used (or set %s)
   <signal> - The signal to be sent, if any. Example: start, success, <return-code>, etc. See the docs for more details.
-`, os.Args[0])
+`, os.Args[0], envCheckID)
 }
 
 func mustWrite(w io.Writer, msg string) {
@@ -83,32 +83,23 @@ func rootCommand() *cobra.Command {
 func rootCommandWithClientFactory(clientFactory pingClientFactory) *cobra.Command {
 	pingOpts := defaultPingOptions()
 	c := &cobra.Command{
-		Use:     "healthchecksio-cli <check_id> [<signal>]",
+		Use:     "healthchecksio-cli [<check_id>] [<signal>]",
 		Short:   "Call healthchecks.io checks from the command line",
 		Version: version.Get().String(),
-		PersistentPreRunE: func(*cobra.Command, []string) error {
-			return pingOpts.validate()
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			return bindAndValidatePingEnvironment(cmd, pingOpts)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var (
-				checkID string
-				signal  string
-			)
-
-			if len(args) == 0 {
+			checkID, signal, checkIDEnvironment := directPingArguments(args)
+			if checkID == "" {
 				mustWrite(cmd.ErrOrStderr(), rootCmdUsage())
 				return &invalidCLIArgsError{"posargs", "check_id not provided"}
 			}
-			if len(args) > 2 {
-				mustWrite(cmd.ErrOrStderr(), rootCmdUsage())
-				return &invalidCLIArgsError{"posargs", "too many arguments"}
-			}
-			checkID = args[0]
-			if len(args) > 1 {
-				signal = args[1]
-			}
 			checkUUID, err := uuid.Parse(checkID)
 			if err != nil {
+				if checkIDEnvironment != "" {
+					return invalidEnvironmentValueError(checkIDEnvironment, "a valid UUID")
+				}
 				return fmt.Errorf("invalid check_id: %w", err)
 			}
 
@@ -144,16 +135,55 @@ func rootCommandWithClientFactory(clientFactory pingClientFactory) *cobra.Comman
 		&pingOpts.attempts,
 		"attempts",
 		defaultAttempts,
-		"Total HTTP attempts per ping (0 to retry indefinitely within the total ping timeout)",
+		"Total HTTP attempts per ping (0 to retry indefinitely within the total ping timeout; env: "+envAttempts+")",
 	)
-	c.PersistentFlags().DurationVar(&pingOpts.retryMaxBackoff, "retry-max-backoff", defaultRetryMaxBackoff, "Maximum delay between ping attempts")
-	c.PersistentFlags().DurationVar(&pingOpts.connectionTimeout, "connection-timeout", defaultConnectionTimeout, "Timeout for ping connection and TLS setup")
-	c.PersistentFlags().DurationVar(&pingOpts.totalPingTimeout, "total-ping-timeout", defaultTotalPingTimeout, "Total timeout for each ping operation")
+	c.PersistentFlags().DurationVar(
+		&pingOpts.retryMaxBackoff,
+		"retry-max-backoff",
+		defaultRetryMaxBackoff,
+		"Maximum delay between ping attempts (env: "+envRetryMaxBackoff+")",
+	)
+	c.PersistentFlags().DurationVar(
+		&pingOpts.connectionTimeout,
+		"connection-timeout",
+		defaultConnectionTimeout,
+		"Timeout for ping connection and TLS setup (env: "+envConnectionTimeout+")",
+	)
+	c.PersistentFlags().DurationVar(
+		&pingOpts.totalPingTimeout,
+		"total-ping-timeout",
+		defaultTotalPingTimeout,
+		"Total timeout for each ping operation (env: "+envTotalPingTimeout+")",
+	)
 
 	c.InitDefaultCompletionCmd()
-	c.Args = cobra.RangeArgs(1, 2)
+	c.Args = cobra.MaximumNArgs(2)
 
 	return c
+}
+
+func directPingArguments(args []string) (string, string, string) {
+	switch len(args) {
+	case 0:
+		checkID := environmentCheckID()
+		if checkID == "" {
+			return "", "", ""
+		}
+		return checkID, "", envCheckID
+	case 1:
+		if args[0] == "" {
+			return "", "", ""
+		}
+		if _, err := uuid.Parse(args[0]); err == nil {
+			return args[0], "", ""
+		}
+		if checkID := environmentCheckID(); checkID != "" {
+			return checkID, args[0], envCheckID
+		}
+		return args[0], "", ""
+	default:
+		return args[0], args[1], ""
+	}
 }
 
 // Command returns the root command for the healthchecksio-cli application.
