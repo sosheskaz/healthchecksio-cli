@@ -10,17 +10,38 @@ import (
 	"os/exec"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
 
 const execCommandHelperEnv = "HEALTHCHECKSIO_CLI_EXEC_HELPER"
 
 func TestExecCommandReportsSubcommandExitCode(t *testing.T) {
 	t.Parallel()
+
+	tests := []struct {
+		name       string
+		helperMode string
+	}{
+		{name: "check flag", helperMode: "exec"},
+		{name: "environment check ID", helperMode: "exec-env"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testExecCommandReportsSubcommandExitCode(t, tc.helperMode)
+		})
+	}
+}
+
+func testExecCommandReportsSubcommandExitCode(t *testing.T, helperMode string) {
+	t.Helper()
 
 	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000007")
 	var (
@@ -40,7 +61,7 @@ func TestExecCommandReportsSubcommandExitCode(t *testing.T) {
 		os.Args[0],
 		"-test.run=TestExecCommandHelper",
 		"--",
-		"exec",
+		helperMode,
 		server.URL,
 		checkID.String(),
 	)
@@ -68,6 +89,75 @@ func TestExecCommandReportsSubcommandExitCode(t *testing.T) {
 	}
 }
 
+func TestExecCommandNamesInvalidEnvironmentCheckIDWithoutPanicking(t *testing.T) {
+	const invalidCheckID = "sensitive-invalid-check-id"
+	t.Setenv(envCheckID, invalidCheckID)
+
+	factoryCalled := false
+	cmd := rootCommandWithClientFactory(func(hc.RetryConfig) (*http.Client, error) {
+		factoryCalled = true
+		return http.DefaultClient, nil
+	})
+	cmd.SetArgs([]string{"exec", "--", os.Args[0], "-test.run=^$"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Errorf("Execute() panicked for invalid %s: %v", envCheckID, recovered)
+		}
+	}()
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error")
+	}
+	if !errors.Is(err, errInvalidEnvironmentValue) {
+		t.Errorf("Execute() error = %v, want invalid environment value", err)
+	}
+	if !strings.Contains(err.Error(), envCheckID) {
+		t.Errorf("Execute() error = %q, want environment name %q", err, envCheckID)
+	}
+	if strings.Contains(err.Error(), invalidCheckID) {
+		t.Errorf("Execute() error exposed environment value: %v", err)
+	}
+	if factoryCalled {
+		t.Fatal("client factory called for invalid check ID")
+	}
+}
+
+func TestExecCheckFlagOverridesEnvironmentCheckID(t *testing.T) {
+	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000020")
+	t.Setenv(envCheckID, "invalid-environment-check-id")
+
+	requestPaths := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPaths <- r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
+	cmd.SetArgs([]string{
+		"exec",
+		"--check", checkID.String(),
+		"--",
+		os.Args[0],
+		"-test.run=^$",
+	})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	gotPaths := []string{<-requestPaths, <-requestPaths}
+	wantPaths := []string{"/" + checkID.String() + "/start", "/" + checkID.String() + "/0"}
+	if !reflect.DeepEqual(gotPaths, wantPaths) {
+		t.Fatalf("request paths = %v, want %v", gotPaths, wantPaths)
+	}
+}
+
 //nolint:paralleltest // helper subprocess mutates process-wide transport and exits intentionally.
 func TestExecCommandHelper(t *testing.T) {
 	if os.Getenv(execCommandHelperEnv) != "1" {
@@ -83,11 +173,14 @@ func TestExecCommandHelper(t *testing.T) {
 	}
 
 	switch args[1] {
-	case "exec":
+	case "exec", "exec-env":
 		if len(args) != 4 {
-			t.Fatalf("exec helper got args %v, want exec <server-url> <check-id>", args[1:])
+			t.Fatalf("exec helper got args %v, want %s <server-url> <check-id>", args[1:], args[1])
 		}
-		runExecCommandHelper(t, args[2], args[3])
+		if args[1] == "exec-env" {
+			t.Setenv(envCheckID, args[3])
+		}
+		runExecCommandHelper(t, args[2], args[3], args[1] == "exec-env")
 	case "exit":
 		if len(args) != 3 {
 			t.Fatalf("exit helper got args %v, want exit <code>", args[1:])
@@ -116,16 +209,19 @@ func TestExecCommandHelper(t *testing.T) {
 	}
 }
 
-func runExecCommandHelper(t *testing.T, serverURL, checkID string) {
+func runExecCommandHelper(t *testing.T, serverURL, checkID string, useEnvironment bool) {
 	t.Helper()
 
 	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, serverURL))
-	cmd.SetArgs([]string{
+	args := []string{
 		"exec",
 		"--total-ping-timeout",
 		"25ms",
-		"--check",
-		checkID,
+	}
+	if !useEnvironment {
+		args = append(args, "--check", checkID)
+	}
+	args = append(args,
 		"--",
 		os.Args[0],
 		"-test.run=TestExecCommandHelper",
@@ -133,7 +229,8 @@ func runExecCommandHelper(t *testing.T, serverURL, checkID string) {
 		"sleep-exit",
 		"100ms",
 		"7",
-	})
+	)
+	cmd.SetArgs(args)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 

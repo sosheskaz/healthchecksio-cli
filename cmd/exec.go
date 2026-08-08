@@ -16,15 +16,18 @@ func execCommand(pingOpts *pingOptions, clientFactory pingClientFactory) *cobra.
 	c := &cobra.Command{
 		Use:   "exec [flags] [command...]",
 		Short: "Execute a command and report its status to healthchecks.io",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			checkID := cmd.Flag("check").Value.String()
 			if checkID == "" {
 				cmd.Println("Please provide a check id")
-				return
+				return nil
 			}
 			checkUUID, err := uuid.Parse(checkID)
 			if err != nil {
-				panic(fmt.Sprintf("check ID %q is not a valid UUID: %+v", checkID, err))
+				if environment := environmentSource(cmd, "check"); environment != "" {
+					return invalidEnvironmentValueError(environment, "a valid UUID")
+				}
+				return fmt.Errorf("check ID is not a valid UUID: %w", err)
 			}
 
 			subcommand := exec.CommandContext(cmd.Context(), args[0], args[1:]...) //nolint:gosec // user-provided command
@@ -69,10 +72,11 @@ func execCommand(pingOpts *pingOptions, clientFactory pingClientFactory) *cobra.
 				os.Exit(exitCode)
 			}
 			mustWrite(cmd.ErrOrStderr(), "check succeeded\n")
+			return nil
 		},
 	}
 
-	c.Flags().StringP("check", "c", "", "The check id to be used")
+	c.Flags().StringP("check", "c", "", "The check id to be used (env: "+envCheckID+")")
 	if err := c.MarkFlagRequired("check"); err != nil {
 		panic(err)
 	}
