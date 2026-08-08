@@ -57,6 +57,13 @@ func bindEnvironment(cmd *cobra.Command) error {
 	return nil
 }
 
+func bindAndValidatePingEnvironment(cmd *cobra.Command, pingOpts *pingOptions) error {
+	if err := bindEnvironment(cmd); err != nil {
+		return err
+	}
+	return environmentPingValidationError(cmd, pingOpts.validate())
+}
+
 func environmentSource(cmd *cobra.Command, flag string) string {
 	sources, ok := cmd.Context().Value(environmentSourcesKey{}).(map[string]string)
 	if !ok {

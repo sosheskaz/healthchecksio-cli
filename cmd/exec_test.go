@@ -158,6 +158,26 @@ func TestExecCheckFlagOverridesEnvironmentCheckID(t *testing.T) {
 	}
 }
 
+func TestExecCommandRejectsEmptyCheckFlag(t *testing.T) {
+	t.Parallel()
+
+	factoryCalled := false
+	cmd := rootCommandWithClientFactory(func(hc.RetryConfig) (*http.Client, error) {
+		factoryCalled = true
+		return http.DefaultClient, nil
+	})
+	cmd.SetArgs([]string{"exec", "--check=", "--", os.Args[0], "-test.run=^$"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("Execute() error = nil, want empty check flag error")
+	}
+	if factoryCalled {
+		t.Fatal("client factory called for empty check flag")
+	}
+}
+
 //nolint:paralleltest // helper subprocess mutates process-wide transport and exits intentionally.
 func TestExecCommandHelper(t *testing.T) {
 	if os.Getenv(execCommandHelperEnv) != "1" {

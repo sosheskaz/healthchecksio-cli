@@ -114,7 +114,7 @@ func TestRootCommandPassesEnvironmentRetryConfiguration(t *testing.T) {
 
 	started := time.Now()
 	cmd := rootCommandWithClientFactory(factory)
-	cmd.SetArgs(nil)
+	cmd.SetArgs([]string{})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	if err := cmd.Execute(); err != nil {

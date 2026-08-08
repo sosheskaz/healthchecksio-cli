@@ -98,6 +98,66 @@ func TestRootCommandAcceptsEnvironmentCheckIDAndSignal(t *testing.T) {
 	}
 }
 
+func TestRootCommandRejectsEmptyPositionalCheckIDWhenEnvironmentIsSet(t *testing.T) {
+	t.Setenv(envCheckID, uuid.MustParse("00000000-0000-4000-8000-000000000021").String())
+
+	factoryCalled := false
+	cmd := rootCommandWithClientFactory(func(hc.RetryConfig) (*http.Client, error) {
+		factoryCalled = true
+		return &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
+				Request:    req,
+			}, nil
+		})}, nil
+	})
+	cmd.SetArgs([]string{""})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("Execute() error = nil, want empty positional check ID error")
+	}
+	if factoryCalled {
+		t.Fatal("client factory called for empty positional check ID")
+	}
+}
+
+//nolint:paralleltest // The parent sets process-wide environment for every command case.
+func TestUtilityCommandsIgnoreEnvironmentConfiguration(t *testing.T) {
+	t.Setenv(envAttempts, "invalid")
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "help flag", args: []string{"--help"}},
+		{name: "help command", args: []string{"help"}},
+		{name: "completion command", args: []string{"completion", "bash"}},
+		{name: "completion protocol", args: []string{"__complete", ""}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			factoryCalled := false
+			cmd := rootCommandWithClientFactory(func(hc.RetryConfig) (*http.Client, error) {
+				factoryCalled = true
+				return http.DefaultClient, nil
+			})
+			cmd.SetArgs(tc.args)
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if factoryCalled {
+				t.Fatal("client factory called for utility command")
+			}
+		})
+	}
+}
+
 func TestDirectPingArguments(t *testing.T) {
 	environmentID := uuid.MustParse("00000000-0000-4000-8000-000000000013").String()
 	positionalID := uuid.MustParse("00000000-0000-4000-8000-000000000014").String()
@@ -148,7 +208,7 @@ func TestRootCommandRejectsInvalidEnvironmentCheckIDWithoutExposingIt(t *testing
 		factoryCalled = true
 		return http.DefaultClient, nil
 	})
-	cmd.SetArgs(nil)
+	cmd.SetArgs([]string{})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 
@@ -178,7 +238,7 @@ func TestRootCommandTreatsEmptyEnvironmentCheckIDAsUnset(t *testing.T) {
 		factoryCalled = true
 		return http.DefaultClient, nil
 	})
-	cmd.SetArgs(nil)
+	cmd.SetArgs([]string{})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 

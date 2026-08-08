@@ -16,11 +16,13 @@ func execCommand(pingOpts *pingOptions, clientFactory pingClientFactory) *cobra.
 	c := &cobra.Command{
 		Use:   "exec [flags] [command...]",
 		Short: "Execute a command and report its status to healthchecks.io",
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			return bindAndValidatePingEnvironment(cmd, pingOpts)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkID := cmd.Flag("check").Value.String()
 			if checkID == "" {
-				cmd.Println("Please provide a check id")
-				return nil
+				return &invalidCLIArgsError{Arg: "check", Problem: "check id not provided"}
 			}
 			checkUUID, err := uuid.Parse(checkID)
 			if err != nil {

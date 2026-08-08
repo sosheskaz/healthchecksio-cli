@@ -86,11 +86,8 @@ func rootCommandWithClientFactory(clientFactory pingClientFactory) *cobra.Comman
 		Use:     "healthchecksio-cli [<check_id>] [<signal>]",
 		Short:   "Call healthchecks.io checks from the command line",
 		Version: version.Get().String(),
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			if err := bindEnvironment(cmd); err != nil {
-				return err
-			}
-			return environmentPingValidationError(cmd, pingOpts.validate())
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			return bindAndValidatePingEnvironment(cmd, pingOpts)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkID, signal, checkIDEnvironment := directPingArguments(args)
@@ -174,6 +171,9 @@ func directPingArguments(args []string) (string, string, string) {
 		}
 		return checkID, "", envCheckID
 	case 1:
+		if args[0] == "" {
+			return "", "", ""
+		}
 		if _, err := uuid.Parse(args[0]); err == nil {
 			return args[0], "", ""
 		}
