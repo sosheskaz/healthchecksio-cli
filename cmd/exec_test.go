@@ -79,6 +79,12 @@ func testExecCommandReportsSubcommandExitCode(t *testing.T, helperMode string) {
 	if got, want := exitErr.ExitCode(), 7; got != want {
 		t.Fatalf("helper exit code = %d, want %d; stdout: %s; stderr: %s", got, want, stdout.String(), stderr.String())
 	}
+	if strings.Contains(stderr.String(), checkID.String()) {
+		t.Fatalf("helper stderr exposed check ID: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "starting check\n") {
+		t.Fatalf("helper stderr = %q, want starting check message", stderr.String())
+	}
 
 	mu.Lock()
 	gotPaths := append([]string(nil), requestPaths...)
@@ -252,7 +258,7 @@ func runExecCommandHelper(t *testing.T, serverURL, checkID string, useEnvironmen
 	)
 	cmd.SetArgs(args)
 	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetErr(os.Stderr)
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("exec command error = %v", err)
