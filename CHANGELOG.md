@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.4.0...v1.4.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* **cli:** omit check UUIDs from progress logs ([#132](https://github.com/sosheskaz/healthchecksio-cli/issues/132)) ([38fb09f](https://github.com/sosheskaz/healthchecksio-cli/commit/38fb09f24df500cb15c3a0d89ec3c032957a9665))
+
 ## [1.4.0](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.3.0...v1.4.0) (2026-08-08)
 
 
