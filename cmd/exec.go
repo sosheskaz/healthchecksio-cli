@@ -42,7 +42,7 @@ func execCommand(pingOpts *pingOptions, clientFactory pingClientFactory) *cobra.
 				panic(fmt.Sprintf("failed to construct check: %+v", err))
 			}
 
-			mustWrite(cmd.ErrOrStderr(), "starting check "+checkID+"\n")
+			mustWrite(cmd.ErrOrStderr(), "starting check\n")
 			if err := pingOpts.call(cmd.Context(), func(ctx context.Context) error {
 				return check.Start(ctx)
 			}); err != nil {

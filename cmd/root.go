@@ -117,7 +117,7 @@ func rootCommandWithClientFactory(clientFactory pingClientFactory) *cobra.Comman
 				return err
 			}
 
-			mustWrite(cmd.ErrOrStderr(), "calling check "+checkID)
+			mustWrite(cmd.ErrOrStderr(), "calling check")
 			if signal != "" {
 				mustWrite(cmd.ErrOrStderr(), " with signal "+signal)
 			}

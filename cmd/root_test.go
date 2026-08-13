@@ -62,7 +62,8 @@ func TestRootCommandAcceptsStartSignal(t *testing.T) {
 	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
 	cmd.SetArgs([]string{checkID.String(), "start"})
 	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&bytes.Buffer{})
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -70,6 +71,12 @@ func TestRootCommandAcceptsStartSignal(t *testing.T) {
 
 	if got, want := <-requestPath, "/"+checkID.String()+"/start"; got != want {
 		t.Fatalf("request path = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "calling check with signal start\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+	if strings.Contains(stderr.String(), checkID.String()) {
+		t.Fatalf("stderr exposed check ID: %q", stderr.String())
 	}
 }
 
@@ -87,7 +94,8 @@ func TestRootCommandAcceptsEnvironmentCheckIDAndSignal(t *testing.T) {
 	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
 	cmd.SetArgs([]string{"start"})
 	cmd.SetOut(&bytes.Buffer{})
-	cmd.SetErr(&bytes.Buffer{})
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -95,6 +103,38 @@ func TestRootCommandAcceptsEnvironmentCheckIDAndSignal(t *testing.T) {
 
 	if got, want := <-requestPath, "/"+checkID.String()+"/start"; got != want {
 		t.Fatalf("request path = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "calling check with signal start\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+	if strings.Contains(stderr.String(), checkID.String()) {
+		t.Fatalf("stderr exposed check ID from environment: %q", stderr.String())
+	}
+}
+
+func TestRootCommandOmitsCheckIDWithoutSignal(t *testing.T) {
+	t.Parallel()
+
+	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000022")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
+	cmd.SetArgs([]string{checkID.String()})
+	cmd.SetOut(&bytes.Buffer{})
+	var stderr bytes.Buffer
+	cmd.SetErr(&stderr)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got, want := stderr.String(), "calling check\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+	if strings.Contains(stderr.String(), checkID.String()) {
+		t.Fatalf("stderr exposed check ID: %q", stderr.String())
 	}
 }
 
