@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.2](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.4.1...v1.4.2) (2026-08-15)
+
+
+### Bug Fixes
+
+* **deps:** update Go to 1.26.6 ([#136](https://github.com/sosheskaz/healthchecksio-cli/issues/136)) ([5ca4650](https://github.com/sosheskaz/healthchecksio-cli/commit/5ca4650ef5037871205bc9bade3c8b9c8f26877a))
+
 ## [1.4.1](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.4.0...v1.4.1) (2026-08-13)
 
 
