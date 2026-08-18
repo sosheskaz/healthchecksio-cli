@@ -27,7 +27,7 @@
       "semanticCommitType": "ci",
       "pinDigests": true,
       "versioning": "semver",
-      "automerge": true
+      "automerge": false
     },
     {
       "matchManagers": ["mise"],
@@ -38,7 +38,7 @@
       "matchManagers": ["mise"],
       "matchDepNames": ["!go"],
       "matchUpdateTypes": ["patch", "minor"],
-      "automerge": true
+      "automerge": false
     },
     {
       "matchManagers": ["gomod"],
