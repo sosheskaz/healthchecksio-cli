@@ -11,9 +11,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
 )
 
@@ -199,19 +200,17 @@ func TestRetryingHTTPClientRetriesExpectedStatuses(t *testing.T) {
 			t.Parallel()
 
 			var requests atomic.Int32
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				requests.Add(1)
 				if tc.status == http.StatusTooManyRequests {
 					w.Header().Set("Retry-After", "0")
 				}
 				w.WriteHeader(tc.status)
 			}))
-			t.Cleanup(server.Close)
 
-			check := newRetryTestCheck(t, server.URL, tc.attempts)
+			check := newRetryTestCheck(t, server, tc.attempts)
 			err := check.Success(t.Context())
-			var statusErr BadStatusError
-			if !errors.As(err, &statusErr) {
+			if _, ok := errors.AsType[BadStatusError](err); !ok {
 				t.Fatalf("Success() error = %T %[1]v, want BadStatusError", err)
 			}
 			if got := requests.Load(); got != tc.wantRequests {
@@ -228,7 +227,7 @@ func TestRetryingHTTPClientReplaysRequestBody(t *testing.T) {
 		mu     sync.Mutex
 		bodies []string
 	)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("io.ReadAll() error = %v", err)
@@ -243,9 +242,8 @@ func TestRetryingHTTPClientReplaysRequestBody(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
 
-	check := newRetryTestCheck(t, server.URL, 2)
+	check := newRetryTestCheck(t, server, 2)
 	if err := check.Log(t.Context(), "diagnostics"); err != nil {
 		t.Fatalf("Log() error = %v", err)
 	}
@@ -285,7 +283,7 @@ func TestRetryingHTTPClientRetriesConnectionFailure(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	check := newRetryTestCheck(t, server.URL, 2)
+	check := newRetryTestCheckForURL(t, server.URL, 2)
 	if err := check.Success(t.Context()); err != nil {
 		t.Fatalf("Success() error = %v", err)
 	}
@@ -347,35 +345,47 @@ func TestRetryingHTTPClientAppliesTLSHandshakeTimeout(t *testing.T) {
 func TestRetryingHTTPClientRetriesUntilContextDeadline(t *testing.T) {
 	t.Parallel()
 
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	t.Cleanup(server.Close)
+	synctest.Test(t, func(t *testing.T) {
+		var requests atomic.Int32
+		server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			requests.Add(1)
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
 
-	check := newRetryTestCheckWithBackoff(t, server.URL, 0, 20*time.Millisecond)
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Millisecond)
-	defer cancel()
-	started := time.Now()
-	err := check.Success(ctx)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Success() error = %T %[1]v, want context deadline exceeded", err)
-	}
-	if got := requests.Load(); got < 2 {
-		t.Fatalf("requests = %d, want at least 2", got)
-	}
-	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
-		t.Fatalf("Success() elapsed = %s, want prompt cancellation", elapsed)
-	}
+		check := newRetryTestCheckWithBackoff(t, server, 0, 20*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Millisecond)
+		defer cancel()
+		started := time.Now()
+		err := check.Success(ctx)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Success() error = %T %[1]v, want context deadline exceeded", err)
+		}
+		if got := requests.Load(); got < 2 {
+			t.Fatalf("requests = %d, want at least 2", got)
+		}
+		if elapsed := time.Since(started); elapsed != 60*time.Millisecond {
+			t.Fatalf("Success() elapsed = %s, want 60ms", elapsed)
+		}
+	})
 }
 
-func newRetryTestCheck(t *testing.T, serverURL string, attempts int) *Check {
+func newRetryTestCheck(t *testing.T, server *httptest.Server, attempts int) *Check {
 	t.Helper()
-	return newRetryTestCheckWithBackoff(t, serverURL, attempts, time.Nanosecond)
+	return newRetryTestCheckWithBackoff(t, server, attempts, time.Nanosecond)
 }
 
-func newRetryTestCheckWithBackoff(t *testing.T, serverURL string, attempts int, maxBackoff time.Duration) *Check {
+func newRetryTestCheckWithBackoff(t *testing.T, server *httptest.Server, attempts int, maxBackoff time.Duration) *Check {
+	t.Helper()
+	client := server.Client()
+	return newRetryTestCheckWithTransport(t, server.URL, client.Transport, attempts, maxBackoff)
+}
+
+func newRetryTestCheckForURL(t *testing.T, serverURL string, attempts int) *Check {
+	t.Helper()
+	return newRetryTestCheckWithTransport(t, serverURL, nil, attempts, time.Nanosecond)
+}
+
+func newRetryTestCheckWithTransport(t *testing.T, serverURL string, transport http.RoundTripper, attempts int, maxBackoff time.Duration) *Check {
 	t.Helper()
 
 	client, err := NewRetryingHTTPClient(RetryConfig{
@@ -385,6 +395,13 @@ func newRetryTestCheckWithBackoff(t *testing.T, serverURL string, attempts int, 
 	})
 	if err != nil {
 		t.Fatalf("NewRetryingHTTPClient() error = %v", err)
+	}
+	if transport != nil {
+		retryTransport, ok := client.Transport.(*retryablehttp.RoundTripper)
+		if !ok {
+			t.Fatalf("client.Transport = %T, want *retryablehttp.RoundTripper", client.Transport)
+		}
+		retryTransport.Client.HTTPClient.Transport = transport
 	}
 	check, err := NewUUIDCheck(
 		uuid.MustParse("00000000-0000-4000-8000-000000000008"),

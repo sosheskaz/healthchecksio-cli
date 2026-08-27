@@ -5,8 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )

@@ -1,9 +1,8 @@
 module github.com/sosheskaz/healthchecksio-cli
 
-go 1.25.4
+go 1.27.0
 
 require (
-	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/spf13/cobra v1.10.2
 )

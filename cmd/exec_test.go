@@ -14,8 +14,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
@@ -137,13 +136,13 @@ func TestExecCheckFlagOverridesEnvironmentCheckID(t *testing.T) {
 	t.Setenv(envCheckID, "invalid-environment-check-id")
 
 	requestPaths := make(chan string, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestPaths <- r.URL.Path
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
+	client := server.Client()
 
-	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL, client.Transport))
 	cmd.SetArgs([]string{
 		"exec",
 		"--check", checkID.String(),
@@ -238,7 +237,7 @@ func TestExecCommandHelper(t *testing.T) {
 func runExecCommandHelper(t *testing.T, serverURL, checkID string, useEnvironment bool) {
 	t.Helper()
 
-	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, serverURL))
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, serverURL, http.DefaultTransport))
 	args := []string{
 		"exec",
 		"--total-ping-timeout",

@@ -9,8 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
@@ -32,7 +31,7 @@ func (t rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func routeHealthchecksTo(t *testing.T, targetURL string) pingClientFactory {
+func routeHealthchecksTo(t *testing.T, targetURL string, base http.RoundTripper) pingClientFactory {
 	t.Helper()
 
 	parsed, err := url.Parse(targetURL)
@@ -43,7 +42,7 @@ func routeHealthchecksTo(t *testing.T, targetURL string) pingClientFactory {
 	return func(hc.RetryConfig) (*http.Client, error) {
 		return &http.Client{Transport: rewriteTransport{
 			target: parsed,
-			base:   http.DefaultTransport,
+			base:   base,
 		}}, nil
 	}
 }
@@ -53,13 +52,13 @@ func TestRootCommandAcceptsStartSignal(t *testing.T) {
 
 	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000006")
 	requestPath := make(chan string, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestPath <- r.URL.Path
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
+	client := server.Client()
 
-	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL, client.Transport))
 	cmd.SetArgs([]string{checkID.String(), "start"})
 	cmd.SetOut(&bytes.Buffer{})
 	var stderr bytes.Buffer
@@ -85,13 +84,13 @@ func TestRootCommandAcceptsEnvironmentCheckIDAndSignal(t *testing.T) {
 	t.Setenv(envCheckID, checkID.String())
 
 	requestPath := make(chan string, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestPath <- r.URL.Path
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
+	client := server.Client()
 
-	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL, client.Transport))
 	cmd.SetArgs([]string{"start"})
 	cmd.SetOut(&bytes.Buffer{})
 	var stderr bytes.Buffer
@@ -116,12 +115,12 @@ func TestRootCommandOmitsCheckIDWithoutSignal(t *testing.T) {
 	t.Parallel()
 
 	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000022")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
+	client := server.Client()
 
-	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
+	cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL, client.Transport))
 	cmd.SetArgs([]string{checkID.String()})
 	cmd.SetOut(&bytes.Buffer{})
 	var stderr bytes.Buffer
@@ -135,6 +134,77 @@ func TestRootCommandOmitsCheckIDWithoutSignal(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), checkID.String()) {
 		t.Fatalf("stderr exposed check ID: %q", stderr.String())
+	}
+}
+
+func TestRootCommandAcceptsStandardUUIDForms(t *testing.T) {
+	t.Parallel()
+
+	const canonical = "00000000-0000-4000-8000-000000000023"
+	tests := []struct {
+		name    string
+		checkID string
+	}{
+		{name: "canonical", checkID: canonical},
+		{name: "braced", checkID: "{" + canonical + "}"},
+		{name: "URN", checkID: "urn:uuid:" + canonical},
+		{name: "raw hexadecimal", checkID: "00000000000040008000000000000023"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			requestPath := make(chan string, 1)
+			cmd := rootCommandWithClientFactory(func(hc.RetryConfig) (*http.Client, error) {
+				return &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+					requestPath <- req.URL.Path
+					return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Request: req}, nil
+				})}, nil
+			})
+			cmd.SetArgs([]string{tc.checkID})
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if got, want := <-requestPath, "/"+canonical; got != want {
+				t.Fatalf("request path = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestRootCommandRejectsNonstandardUUIDForms(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		checkID string
+	}{
+		{name: "uppercase URN prefix", checkID: "URN:UUID:00000000-0000-4000-8000-000000000023"},
+		{name: "wrapped without braces", checkID: "x00000000-0000-4000-8000-000000000023y"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			factoryCalled := false
+			cmd := rootCommandWithClientFactory(func(hc.RetryConfig) (*http.Client, error) {
+				factoryCalled = true
+				return http.DefaultClient, nil
+			})
+			cmd.SetArgs([]string{tc.checkID})
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+
+			if err := cmd.Execute(); err == nil {
+				t.Fatal("Execute() error = nil, want invalid check ID error")
+			}
+			if factoryCalled {
+				t.Fatal("client factory called for invalid check ID")
+			}
+		})
 	}
 }
 
