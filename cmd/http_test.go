@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/sosheskaz/healthchecksio-cli/internal/hc"
 )
@@ -338,15 +338,21 @@ func TestRootCommandRejectsInvalidPingOptions(t *testing.T) {
 func TestPingOptionsCallEnforcesTotalTimeout(t *testing.T) {
 	t.Parallel()
 
-	opts := defaultPingOptions()
-	opts.totalPingTimeout = 10 * time.Millisecond
-	err := opts.call(t.Context(), func(ctx context.Context) error {
-		<-ctx.Done()
-		return ctx.Err()
+	synctest.Test(t, func(t *testing.T) {
+		opts := defaultPingOptions()
+		opts.totalPingTimeout = 10 * time.Millisecond
+		started := time.Now()
+		err := opts.call(t.Context(), func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("call() error = %v, want context deadline exceeded", err)
+		}
+		if elapsed := time.Since(started); elapsed != 10*time.Millisecond {
+			t.Fatalf("call() elapsed = %s, want 10ms", elapsed)
+		}
 	})
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("call() error = %v, want context deadline exceeded", err)
-	}
 }
 
 func TestRootLogSignal(t *testing.T) {
@@ -386,38 +392,39 @@ func TestRootLogSignal(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				var requests atomic.Int32
+				bodyCh := make(chan string, 1)
+				server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests.Add(1)
+					body, err := io.ReadAll(r.Body)
+					if err != nil {
+						t.Errorf("io.ReadAll() error = %v", err)
+					}
+					bodyCh <- string(body)
+					w.WriteHeader(http.StatusOK)
+				}))
+				client := server.Client()
 
-			var requests atomic.Int32
-			bodyCh := make(chan string, 1)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				requests.Add(1)
-				body, err := io.ReadAll(r.Body)
-				if err != nil {
-					t.Errorf("io.ReadAll() error = %v", err)
+				checkID := uuid.MustParse("00000000-0000-4000-8000-000000000031")
+				cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL, client.Transport))
+				cmd.SetArgs([]string{"--total-ping-timeout", tc.timeout.String(), checkID.String(), "log"})
+				cmd.SetIn(tc.input())
+				cmd.SetOut(&bytes.Buffer{})
+				cmd.SetErr(&bytes.Buffer{})
+				err := cmd.Execute()
+				if (err != nil) != tc.wantErr {
+					t.Fatalf("Execute() error = %v, wantErr %v", err, tc.wantErr)
 				}
-				bodyCh <- string(body)
-				w.WriteHeader(http.StatusOK)
-			}))
-			t.Cleanup(server.Close)
-
-			checkID := uuid.MustParse("00000000-0000-4000-8000-000000000031")
-			cmd := rootCommandWithClientFactory(routeHealthchecksTo(t, server.URL))
-			cmd.SetArgs([]string{"--total-ping-timeout", tc.timeout.String(), checkID.String(), "log"})
-			cmd.SetIn(tc.input())
-			cmd.SetOut(&bytes.Buffer{})
-			cmd.SetErr(&bytes.Buffer{})
-			err := cmd.Execute()
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("Execute() error = %v, wantErr %v", err, tc.wantErr)
-			}
-			if got := requests.Load(); got != tc.wantRequests {
-				t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
-			}
-			if tc.wantRequests > 0 {
-				if got := <-bodyCh; got != tc.wantBody {
-					t.Fatalf("body = %q, want %q", got, tc.wantBody)
+				if got := requests.Load(); got != tc.wantRequests {
+					t.Fatalf("requests = %d, want %d", got, tc.wantRequests)
 				}
-			}
+				if tc.wantRequests > 0 {
+					if got := <-bodyCh; got != tc.wantBody {
+						t.Fatalf("body = %q, want %q", got, tc.wantBody)
+					}
+				}
+			})
 		})
 	}
 }
@@ -430,7 +437,7 @@ type delayedReader struct {
 
 func (r *delayedReader) Read(p []byte) (int, error) {
 	if !r.slept {
-		time.Sleep(r.delay)
+		synctest.Sleep(r.delay)
 		r.slept = true
 	}
 	//nolint:wrapcheck // io.Reader must return io.EOF unchanged.

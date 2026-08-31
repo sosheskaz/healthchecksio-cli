@@ -7,8 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type requestOptions struct {

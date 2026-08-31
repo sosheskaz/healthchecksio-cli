@@ -2,6 +2,8 @@
 
 A simple CLI for healthchecks.io
 
+Building from source requires Go 1.27 or later. Prebuilt macOS binaries require macOS 13 Ventura or later.
+
 Usage:
 
 ```bash

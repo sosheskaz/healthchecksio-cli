@@ -8,20 +8,31 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 )
+
+func TestNewUUIDCheckRejectsNilUUID(t *testing.T) {
+	t.Parallel()
+
+	check, err := NewUUIDCheck(uuid.Nil())
+	if err == nil {
+		t.Fatal("NewUUIDCheck() error = nil, want nil UUID error")
+	}
+	if check != nil {
+		t.Fatalf("NewUUIDCheck() check = %v, want nil", check)
+	}
+}
 
 func TestCheckReportsBadHTTPStatus(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	t.Cleanup(server.Close)
+	client := server.Client()
 
 	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000001")
-	check, err := NewUUIDCheck(checkID, WithBaseURL(server.URL))
+	check, err := NewUUIDCheck(checkID, WithBaseURL(server.URL), WithHTTPClient(client))
 	if err != nil {
 		t.Fatalf("NewUUIDCheck() error = %v", err)
 	}
@@ -66,15 +77,15 @@ func TestCheckAddsRunIDToExistingQuery(t *testing.T) {
 	t.Parallel()
 
 	requestQuery := make(chan url.Values, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestQuery <- r.URL.Query()
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
+	client := server.Client()
 
 	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000003")
 	runID := uuid.MustParse("00000000-0000-4000-8000-000000000004")
-	check, err := NewUUIDCheck(checkID, WithBaseURL(server.URL+"?existing=true"))
+	check, err := NewUUIDCheck(checkID, WithBaseURL(server.URL+"?existing=true"), WithHTTPClient(client))
 	if err != nil {
 		t.Fatalf("NewUUIDCheck() error = %v", err)
 	}
@@ -101,7 +112,7 @@ func TestCheckMethodsUseExpectedPathsAndBodies(t *testing.T) {
 	}
 
 	records := make(chan requestRecord, 5)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = r.Body.Close() }()
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -112,10 +123,10 @@ func TestCheckMethodsUseExpectedPathsAndBodies(t *testing.T) {
 		records <- requestRecord{path: r.URL.Path, body: string(body)}
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
+	client := server.Client()
 
 	checkID := uuid.MustParse("00000000-0000-4000-8000-000000000005")
-	check, err := NewUUIDCheck(checkID, WithBaseURL(server.URL))
+	check, err := NewUUIDCheck(checkID, WithBaseURL(server.URL), WithHTTPClient(client))
 	if err != nil {
 		t.Fatalf("NewUUIDCheck() error = %v", err)
 	}

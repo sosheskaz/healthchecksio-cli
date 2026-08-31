@@ -72,8 +72,12 @@ changelog:
 
 kos:
   - repositories: [ghcr.io/sosheskaz/healthchecksio-cli]
-    # Disabled for snapshot builds so PR validation never pushes.
-    disable: "{{ .IsSnapshot }}"
+    # Keep the package explicit: Go 1.27 rejects the empty package path that
+    # older toolchains treated as the current package.
+    main: .
+    # Snapshot releases load into the runner's local Docker daemon, exercising
+    # the Ko integration without publishing to an external registry.
+    local_domain: goreleaser.ko.local
     tags:
       - "{{.Version}}"
       - "{{.Major}}"

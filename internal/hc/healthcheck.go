@@ -7,8 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 const (
@@ -46,7 +45,7 @@ type Check struct {
 
 // NewUUIDCheck creates a new health check for the given UUID.
 func NewUUIDCheck(id uuid.UUID, opts ...CheckOption) (*Check, error) {
-	if id == uuid.Nil {
+	if id == uuid.Nil() {
 		return nil, BadConfigError{Message: "id must not be nil"}
 	}
 	options := &checkOptions{}
