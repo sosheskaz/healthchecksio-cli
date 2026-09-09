@@ -48,7 +48,7 @@ jobs:
     name: Release
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
-    uses: ./.github/workflows/release.yml
+    uses: ./.github/workflows/release.yml # zizmor: ignore[self-repository] actionlint does not yet support GitHub's $/ syntax.
     permissions:
       contents: write
       packages: write
