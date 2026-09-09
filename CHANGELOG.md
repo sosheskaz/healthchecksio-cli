@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.4](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.4.3...v1.4.4) (2026-09-08)
+
+
+### Dependencies
+
+* **go:** update dependency go to v1.27.1 ([#157](https://github.com/sosheskaz/healthchecksio-cli/issues/157)) ([3add155](https://github.com/sosheskaz/healthchecksio-cli/commit/3add1557f521574e58439efbb2b6cdd6aa663fb7))
+
 ## [1.4.3](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.4.2...v1.4.3) (2026-08-27)
 
 
