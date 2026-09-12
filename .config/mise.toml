@@ -4,6 +4,9 @@
 [settings]
 npm.shell_out = true
 
+[env]
+YAMLLINT_CONFIG_FILE = ".config/yamllint.yaml"
+
 [tools]
 go = "1.27.1"
 golangci-lint = "2.13.2"
