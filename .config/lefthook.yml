@@ -15,15 +15,15 @@ pre-commit:
       run: mise exec -- zizmor {staged_files}
 
     - name: shellcheck
-      glob: "mise-tasks/**"
+      glob: ".config/mise/tasks/**"
       run: mise exec -- shellcheck -f "${SHELLCHECK_FORMAT:-tty}" -S error {staged_files}
 
     - name: yamllint
       glob: "**/*.{yml,yaml}"
-      run: mise exec -- yamllint -c .yamllint.yaml {staged_files}
+      run: mise exec -- yamllint -c .config/yamllint.yaml {staged_files}
 
     - name: goreleaser check
-      glob: ".goreleaser.{yml,yaml}"
+      glob: ".config/goreleaser.{yml,yaml}"
       run: mise exec -- goreleaser check
 
     - name: golangci-lint config check
@@ -31,7 +31,7 @@ pre-commit:
       run: mise exec -- golangci-lint config verify
 
     - name: renovate-config-validator
-      glob: "renovate.json"
+      glob: ".github/renovate.json5"
       run: mise exec -- renovate-config-validator
 
 commit-msg:

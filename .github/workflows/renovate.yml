@@ -8,8 +8,8 @@ on:
     - cron: '0 */6 * * *'
   pull_request:
     paths:
-      - renovate.json
-      - mise.toml
+      - .github/renovate.json5
+      - .config/mise.toml
       - .github/workflows/renovate.yml
   workflow_dispatch:
 
@@ -42,7 +42,7 @@ jobs:
           cache: true
 
       - name: Validate renovate config
-        run: renovate-config-validator renovate.json
+        run: renovate-config-validator --strict --no-global .github/renovate.json5
 
       # Token scoped to what renovate actually needs (workflows:write covers
       # digest-pinning updates to .github/workflows) instead of inheriting the
@@ -64,7 +64,7 @@ jobs:
           permission-vulnerability-alerts: read
 
       # The dry-run resolves the config *name* from the default branch, so it
-      # cannot work until renovate.json exists there (bootstrap PRs would fail
+      # cannot work until .github/renovate.json5 exists there (bootstrap PRs would fail
       # with "Error fetching config file from base branch"). Skip it in that
       # window; the validator step above still gates config syntax.
       - name: Check for config on default branch
@@ -74,11 +74,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          if gh api "repos/${REPO}/contents/renovate.json" --jq .name > /dev/null 2>&1; then
+          if gh api "repos/${REPO}/contents/.github/renovate.json5" --jq .name > /dev/null 2>&1; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::renovate.json not on the default branch yet; skipping dry run (validator still ran)"
+            echo "::notice::.github/renovate.json5 not on the default branch yet; skipping dry run (validator still ran)"
           fi
 
       # On pull requests this is a dry run against the PR branch, so config
