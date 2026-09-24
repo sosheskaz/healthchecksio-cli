@@ -10,7 +10,7 @@ YAMLLINT_CONFIG_FILE = ".config/yamllint.yaml"
 [tools]
 go = "1.27.1"
 golangci-lint = "2.13.2"
-goreleaser = "2.18.1"
+goreleaser = "2.18.2"
 ko = "0.19.1"
 
 lefthook = "2.1.14"
