@@ -50,6 +50,12 @@
       "groupName": "go",
       "semanticCommitScope": "go",
       "semanticCommitType": "deps"
+    },
+    {
+      "matchManagers": ["mise", "gomod"],
+      "matchDepNames": ["go"],
+      "matchUpdateTypes": ["patch"],
+      "minimumReleaseAge": null
     }
   ]
 }
