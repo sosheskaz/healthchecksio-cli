@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.7](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.4.6...v1.4.7) (2026-11-01)
+
+
+### Bug Fixes
+
+* **cask:** migrate postflight hook to install_steps for goreleaser 2.19 ([#202](https://github.com/sosheskaz/healthchecksio-cli/issues/202)) ([5a076b3](https://github.com/sosheskaz/healthchecksio-cli/commit/5a076b3f819970560c53973c1449863abd07c890))
+
 ## [1.4.6](https://github.com/sosheskaz/healthchecksio-cli/compare/v1.4.5...v1.4.6) (2026-10-21)
 
 
